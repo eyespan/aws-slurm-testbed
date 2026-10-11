@@ -1,0 +1,49 @@
+{
+  "format_version": "1.0",
+  "terraform_version": "1.5.0",
+  "variables": {
+    "aws_region": {
+      "value": "us-east-1"
+    },
+    "instance_type": {
+      "value": "t3.micro"
+    },
+    "instance_count": {
+      "value": 3
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_instance.controller",
+      "module_address": null,
+      "type": "aws_instance",
+      "name": "controller",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "instance_type": "t3.medium",
+          "ami": "ami-12345678",
+          "instance_state": "pending"
+        }
+      }
+    },
+    {
+      "address": "aws_instance.login",
+      "module_address": null,
+      "type": "aws_instance",
+      "name": "login",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "instance_type": "t3.small",
+          "ami": "ami-12345678",
+          "instance_state": "pending"
+        }
+      }
+    }
+  ]
+}

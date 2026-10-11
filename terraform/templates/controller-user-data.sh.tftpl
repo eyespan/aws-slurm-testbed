@@ -1,0 +1,225 @@
+#!/bin/bash
+# Controller node user data script
+# This script is executed on controller node boot to set up Slurm components
+
+set -e
+
+# Configuration
+PROJECT="${project}"
+ENV="${env}"
+SESSION="${session}"
+EFS_FILESYSTEM_ID="${efs_file_system_id}"
+SLURM_VERSION="${slurm_version}"
+SLURM_STATE_DIR="${slurm_state_dir}"
+MUNGE_KEY_SECRET="${munge_key_secret}"
+
+# Update system
+yum update -y
+
+# Install dependencies
+yum install -y \
+    wget \
+    curl \
+    nfs-utils \
+    python3-pip \
+    jq
+
+# Install Slurm from source
+yum install -y \
+    gcc \
+    gcc-c++ \
+    make \
+    automake \
+    autoconf \
+    libtool \
+    perl \
+    perl-ExtUtils-MakeMaker \
+    openssl-devel \
+    pam-devel \
+    numactl-devel \
+    hwloc-devel \
+    lua-devel \
+    rrdtool-devel \
+    ncurses-devel \
+    man2html \
+    libibmad \
+    libibumad \
+    hpcg \
+    hwloc
+
+# Create slurm user
+useradd -m -s /bin/bash slurm
+
+# Create directories
+mkdir -p ${SLURM_STATE_DIR}
+mkdir -p /var/spool/slurmd
+mkdir -p /etc/slurm
+mkdir -p /opt/hpc
+chown -R slurm:slurm ${SLURM_STATE_DIR}
+chown -R slurm:slurm /var/spool/slurmd
+
+# Mount EFS for Slurm state
+echo "${EFS_FILESYSTEM_ID}:/ ${SLURM_STATE_DIR} efs defaults,fsport=2049,x-systemd.automount 0 0" >> /etc/fstab
+mount -a
+
+# Retrieve Munge key from Secrets Manager
+MUNGE_KEY=$(aws secretsmanager get-secret-value --secret-id ${MUNGE_KEY_SECRET} --query SecretString --output text | jq -r '.munge_key')
+echo "${MUNGE_KEY}" > /etc/munge/munge.key
+chown munge:munge /etc/munge/munge.key
+chmod 400 /etc/munge/munge.key
+
+# Install Slurm
+cd /tmp
+wget https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2
+tar -xjf slurm-${SLURM_VERSION}.tar.bz2
+cd slurm-${SLURM_VERSION}
+
+./configure \
+    --prefix=/usr \
+    --sysconfdir=/etc/slurm \
+    --with-munge=/usr \
+    --with-pam=/usr \
+    --with-numa \
+    --with-hwloc
+
+make -j$(nproc)
+make install
+
+# Copy Slurm configuration files
+cat > /etc/slurm/slurm.conf << 'EOF'
+# slurm.conf - Slurm scheduler configuration
+SlurmctldHost=${controller_hostname}
+SlurmctldPort=6817
+SlurmdPort=6818
+SlurmUser=slurm
+StateSaveLocation=${SLURM_STATE_DIR}
+SlurmdSpoolDir=/var/spool/slurmd
+SlurmctldPidFile=/var/run/slurmctld.pid
+SlurmdPidFile=/var/run/slurmd.pid
+ClusterName=${PROJECT}-${ENV}-${SESSION}
+SlurmctldTimeout=30
+SlurmdTimeout=30
+WaitTime=0
+SchedulerType=sched/backfill
+SelectType=select/cons_res
+SelectTypeParameters=CR_CPU_Memory
+PreemptType=preempt/partition_prio
+PreemptMode=REQUEUE
+ReturnToService=0
+SuspendTime=300
+SuspendTimeout=120
+ResumeTimeout=300
+ResumeRate=0
+EOF
+
+# Configure slurmdbd
+cat > /etc/slurm/slurmdbd.conf << 'EOF'
+# slurmdbd.conf - Slurm Database daemon configuration
+AuthType=auth/munge
+SlurmctldPidFile=/var/run/slurmctld.pid
+StorageType=accounting_storage/slurmdbd
+AccountingStorageHost=${controller_hostname}
+AccountingStoragePort=6819
+AccountingStoragePass=change_me
+AccountingStorageUser=slurm
+EOF
+
+# Configure cgroup
+cat > /etc/slurm/cgroup.conf << 'EOF'
+# cgroup.conf - cgroup configuration for Slurm
+CgroupMountpoint=/sys/fs/cgroup
+CgroupAutomount=yes
+CgroupReleaseAgentDir=/etc/slurm/cgroup
+AllowedFeatures=cpuset
+EOF
+
+# Set permissions
+chown -R slurm:slurm /etc/slurm
+chmod 600 /etc/slurm/slurm.conf
+chmod 600 /etc/slurm/slurmdbd.conf
+chmod 600 /etc/slurm/cgroup.conf
+
+# Enable and start services
+systemctl enable slurmctld
+systemctl enable slurmd
+systemctl enable slurmdbd
+
+# Start services
+systemctl start slurmctld
+systemctl start slurmd
+systemctl start slurmdbd
+
+# Set up cron job for EFS health check
+cat > /etc/cron.d/efs-health << 'EOF'
+# Check EFS health every 5 minutes
+*/5 * * * * root /usr/local/bin/check-efs-health.sh
+EOF
+
+# Set up health check script
+cat > /usr/local/bin/check-efs-health.sh << 'EOF'
+#!/bin/bash
+# Check EFS health and log to CloudWatch Logs
+
+MOUNT_POINT="${SLURM_STATE_DIR}"
+
+if mountpoint -q ${MOUNT_POINT}; then
+    echo "$(date): EFS is mounted at ${MOUNT_POINT}"
+    exit 0
+else
+    echo "$(date): EFS is NOT mounted at ${MOUNT_POINT}" >&2
+    exit 1
+fi
+EOF
+
+chmod +x /usr/local/bin/check-efs-health.sh
+
+# Configure CloudWatch Logs agent
+cat > /tmp/cwagent-config.json << 'EOF'
+{
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/slurm/slurmctld.log",
+            "log_group_name": "/aws/slurm/controller/slurmctld",
+            "log_stream_name": "{instance_id}"
+          },
+          {
+            "file_path": "/var/log/slurm/slurmd.log",
+            "log_group_name": "/aws/slurm/controller/slurmd",
+            "log_stream_name": "{instance_id}"
+          },
+          {
+            "file_path": "/var/log/slurm/slurmdbd.log",
+            "log_group_name": "/aws/slurm/controller/slurmdbd",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
+      }
+    }
+  }
+}
+EOF
+
+# Install CloudWatch Logs agent (simplified - full installation would use the agent package)
+# This is a placeholder for the actual CloudWatch Logs agent installation
+
+# Set up monitoring scripts
+cat > /opt/hpc/slurm_status.sh << 'EOF'
+#!/bin/bash
+# Check Slurm controller status and output JSON for monitoring
+
+scontrol ping > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo '{"status": "healthy", "slurmctld": "running"}'
+    exit 0
+else
+    echo '{"status": "unhealthy", "slurmctld": "not running"}'
+    exit 1
+fi
+EOF
+
+chmod +x /opt/hpc/slurm_status.sh
+
+echo "Controller node setup complete"

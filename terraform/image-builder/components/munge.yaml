@@ -1,0 +1,48 @@
+version: 1.0
+name: munge
+description: |
+  Install and configure munge for Slurm authentication.
+
+parameters:
+  - munge_key_path:
+      description: "SSM parameter path containing munge key"
+      default: "/hpc-testbed/munge/key"
+
+steps:
+  - name: InstallMunge
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Install munge
+          yum install -y munge munge-libs
+
+  - name: ConfigureMunge
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Create munge user if it doesn't exist
+          id -u munge >/dev/null 2>&1 || useradd -r -s /sbin/nologin munge
+
+          # Ensure munge directories exist with correct permissions
+          mkdir -p /etc/munge
+          mkdir -p /var/run/munge
+          mkdir -p /var/log/munge
+
+          # Set permissions
+          chmod 700 /etc/munge
+          chmod 700 /var/run/munge
+          chmod 700 /var/log/munge
+          chown -R munge:munge /etc/munge
+          chown -R munge:munge /var/run/munge
+          chown -R munge:munge /var/log/munge
+
+  - name: EnableMungeService
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Enable and start munge service
+          systemctl enable munge
+          systemctl restart munge

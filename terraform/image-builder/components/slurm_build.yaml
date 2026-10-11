@@ -1,0 +1,97 @@
+version: 1.0
+name: slurm-build
+description: |
+  Build and install Slurm from source.
+  Uses pinned slurm_version variable.
+
+parameters:
+  - slurm_version:
+      description: "Slurm version to build (e.g., 23.11.7)"
+      default: "23.11.7"
+
+steps:
+  - name: InstallBuildDependencies
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Install build dependencies
+          yum install -y gcc make rpm-build
+          yum install -y autotrace libtool autoconf automake
+          yum install -y munge munge-libs
+          yum install -y perl-ExtUtils-MakeMaker
+          yum install -y openssl-devel pam-devel
+          yum install -y libxml2-devel readline-devel
+          yum install -y ncurses-devel zlib-devel
+          yum install -y hwloc-devel lua-devel
+          yum install -y rrdtool-devel
+          yum install -y json-c-devel
+          yum install -y sqlite-devel
+          yum install -y perl-Switch
+
+  - name: DownloadSlurmSource
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Download Slurm source
+          SLURM_VERSION="${slurm_version}"
+          cd /tmp
+          curl -LO "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
+          tar -xjf "slurm-${SLURM_VERSION}.tar.bz2"
+          cd "slurm-${SLURM_VERSION}"
+
+  - name: ConfigureAndBuildSlurm
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Configure and build Slurm
+          cd /tmp/slurm-${slurm_version}
+          ./configure \
+            --prefix=/usr \
+            --sysconfdir=/etc/slurm \
+            --localstatedir=/var \
+            --enable slurmd \
+            --enable slurmctld \
+            --enable slurmdbd \
+            --enable scontrol \
+            --enable slurmrestd \
+            --with-pam=/lib64/security \
+            --with-json=/usr \
+            --with-libxml2=/usr
+          make -j$(nproc)
+          make install
+
+  - name: CreateSlurmDirectories
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Create required directories
+          mkdir -p /var/spool/slurm
+          mkdir -p /var/log/slurm
+          mkdir -p /etc/slurm
+          chown -R slurm:slurm /var/spool/slurm
+          chown -R slurm:slurm /var/log/slurm
+
+  - name: ConfigureSlurmEnv
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Configure environment for Slurm
+          echo 'export SLURM_HOME=/usr' >> /etc/profile.d/slurm.sh
+          echo 'export PATH=$PATH:/usr/bin:/usr/sbin' >> /etc/profile.d/slurm.sh
+          chmod +x /etc/profile.d/slurm.sh
+
+  - name: Cleanup
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Cleanup source and build files
+          cd /tmp
+          rm -rf slurm-${slurm_version}*
+          yum clean all
+          rm -rf /var/cache/yum/*

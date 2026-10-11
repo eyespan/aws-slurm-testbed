@@ -1,0 +1,30 @@
+{
+  "format_version": "1.0",
+  "terraform_version": "1.5.0",
+  "variables": {
+    "aws_region": {
+      "value": "eu-west-1"
+    },
+    "instance_type": {
+      "value": "t3.micro"
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_instance.bad_instance",
+      "module_address": null,
+      "type": "aws_instance",
+      "name": "bad_instance",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["create"],
+        "before": null,
+        "after": {
+          "instance_type": "m5.large",
+          "ami": "ami-12345678",
+          "instance_state": "pending"
+        }
+      }
+    }
+  ]
+}

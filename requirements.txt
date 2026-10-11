@@ -1,0 +1,8 @@
+# Python dependencies for HPC Platform Operations Test Bed
+pytest>=7.0.0
+ruff>=0.1.0
+black>=23.0.0
+moto>=4.0.0
+
+# Pre-commit hooks (installed separately)
+# pre-commit

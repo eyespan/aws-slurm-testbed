@@ -1,0 +1,61 @@
+# Pre-commit hooks for security best practices
+# See https://pre-commit.com for more information
+
+repos:
+  # Terraform formatting and validation
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.96.2
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_validate
+      - id: terraform_tflint
+        args:
+          - --args=--only=aws_api_gateway_resource_has_cors_enabled
+          - --args=--only=aws_db_instance_default_username
+          - --args=--only=aws_db_instance_default_password
+          - --args=--only=aws_db_instance_encryption
+          - --args=--only=aws_db_instance_public_access
+          - --args=--only=aws_iam_policy_description
+          - --args=--only=aws_iam_policy_unused_permissions
+          - --args=--only=aws_instance_metadata_defaults
+          - --args=--only=aws_s3_bucket_public_access
+          - --args=--only=aws_s3_bucket_server_side_encryption_configuration
+
+  # Python linting and formatting
+  - repo: https://github.com/pycqa/ruff-pre-commit
+    rev: v0.17.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # Shell script linting
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.10.0.1
+    hooks:
+      - id: shellcheck
+        files: \.sh$
+
+  # Check for common security issues
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master]
+
+  # Check for AWS credentials in code
+  - repo: https://github.com/gruntwork-io/pre-commit
+    rev: v0.1.26
+    hooks:
+      - id: terraform-validate
+      - id: terraform-fmt
+      - id: checkov
+        args: [--quiet, --skip-check, "CKV_AWS_2", --skip-check, "CKV_AWS_18"]

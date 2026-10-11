@@ -1,0 +1,117 @@
+# Slurm cgroup configuration file
+# Template - Replace variables with actual values
+
+# =============================================================================
+# Cgroup Configuration
+# =============================================================================
+
+# Enable cgroup support
+CgroupAutomount=yes
+
+# Cgroup mount point
+CgroupMountpoint=/sys/fs/cgroup
+
+# Allowed cgroup filesystem types
+CgroupAutomount=yes
+CgroupMountpoint=/sys/fs/cgroup
+
+# =============================================================================
+# Cgroup Plugins
+# =============================================================================
+
+# Cgroup plugin
+CgroupPlugin=controller/cgroup
+
+# =============================================================================
+# Task Plugin
+# =============================================================================
+
+# Task plugin configuration
+TaskPlugin=task/affinity
+
+# =============================================================================
+# CPU Affinity
+# =============================================================================
+
+# CPU affinity settings
+TaskAffinity=yes
+CpuAffinityPlugin=affinity
+
+# =============================================================================
+# Memory Management
+# =============================================================================
+
+# Memory management settings
+MemoryAffinityPlugin=affinity
+TaskPlugin=task/affinity
+
+# =============================================================================
+# GPU Management (if applicable)
+# =============================================================================
+
+# GPU cgroup settings (uncomment if using GPUs)
+# GresTypes=gpu
+# GpuFreqDefault=1380
+# GpuFreqMin=1380
+# GpuFreqMax=1530
+
+# =============================================================================
+# Slurmctld Parameters
+# =============================================================================
+
+# Slurmctld parameters
+SlurmctldParameters=enable_debug,profile_gres
+
+# =============================================================================
+# Prolog/Epilog Configuration
+# =============================================================================
+
+# Prolog configuration
+Prolog=/opt/hpc/scripts/cgroup_prolog.sh
+Epilog=/opt/hpc/scripts/cgroup_epilog.sh
+
+# Task Prolog/Epilog
+TaskProlog=/opt/hpc/scripts/cgroup_task_prolog.sh
+TaskEpilog=/opt/hpc/scripts/cgroup_task_epilog.sh
+
+# =============================================================================
+# Allowed System Resources
+# =============================================================================
+
+# Allowed system resources
+AllowSpecResourcesUser=root,slurm
+
+# =============================================================================
+# Cgroup Allowed Firmware
+# =============================================================================
+
+# Cgroup allowed firmware
+CgroupAllowedFirmware=ALL
+
+# =============================================================================
+# Cgroup Automated Memory Management
+# =============================================================================
+
+# Cgroup automated memory management
+CgroupAutomount=yes
+
+# =============================================================================
+# Cgroup Period
+# =============================================================================
+
+# Cgroup period for CPU controller
+CgroupPeriod=100000
+
+# =============================================================================
+# Cgroup Verbose
+# =============================================================================
+
+# Cgroup verbose mode
+CgroupVerbose=0
+
+# =============================================================================
+# Cgroup Wrap Task
+# =============================================================================
+
+# Cgroup wrap task
+CgroupWrapTask=yes

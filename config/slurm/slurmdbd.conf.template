@@ -1,0 +1,81 @@
+# Slurm DB Daemon configuration file
+# Template - Replace variables with actual values
+
+# =============================================================================
+# Database Connection Configuration
+# =============================================================================
+
+# Database host
+DBDHost={{ slurm_controller_hostname }}
+
+# Database port
+DbdPort=6819
+
+# Authentication method
+DbdAuth=auth/mysql
+
+# Database connection parameters
+DbdParams={{ mariadb_host }}:{{ mariadb_port }},{{ mariadb_database }},{{ mariadb_username }},{{ mariadb_password }}
+
+# Database storage type
+AccountingStorageType=accounting_storage/mysql
+
+# =============================================================================
+# Slurmdbd Configuration
+# =============================================================================
+
+# Slurmdbd user
+SlurmdbdUser=slurm
+
+# Slurmdbd directory configuration
+SlurmdbdPidFile=/var/run/slurmdbd.pid
+SlurmdbdLogDir=/var/log/slurmdbd
+
+# Debug level
+SlurmdbdDebug=info
+
+# =============================================================================
+# Message Logging
+# =============================================================================
+
+# Log level
+SlurmdbdLogFile=/var/log/slurmdbd/slurmdbd.log
+
+# =============================================================================
+# Message Port Configuration
+# =============================================================================
+
+# Port for slurmdbd
+DbdPort=6819
+
+# =============================================================================
+# Authentication Configuration
+# =============================================================================
+
+# Authentication type
+AuthType=auth/munge
+
+# =============================================================================
+# Accounting Store Flags
+# =============================================================================
+
+# Store flags
+AccountingStoreFlags=job_script
+
+# =============================================================================
+# Connection Retries
+# =============================================================================
+
+# Connection retry settings
+DbdRetainSeconds=300
+DbdMessageSize=10485760
+
+# =============================================================================
+# SSL Configuration (optional)
+# =============================================================================
+
+# SSL settings (uncomment if using SSL)
+# DbdSSL=NO
+# DbdSSLCA=
+# DbdSSLCert=
+# DbdSSLKey=

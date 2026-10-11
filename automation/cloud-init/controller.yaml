@@ -1,0 +1,167 @@
+#cloud-config
+# Cloud-init script for Slurm controller node setup
+# This script runs on instance boot to configure Slurm services
+
+# =============================================================================
+# Package Updates and Installation
+# =============================================================================
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - wget
+  - curl
+  - nfs-utils
+  - python3-pip
+  - jq
+  - gcc
+  - gcc-c++
+  - make
+  - automake
+  - autoconf
+  - libtool
+  - perl
+  - perl-ExtUtils-MakeMaker
+  - openssl-devel
+  - pam-devel
+  - numactl-devel
+  - hwloc-devel
+  - lua-devel
+  - rrdtool-devel
+  - ncurses-devel
+  - man2html
+  - libibmad
+  - libibumad
+  - hpcg
+  - hwloc
+  - mariadb
+  - mariadb-server
+
+# =============================================================================
+# User and Group Setup
+# =============================================================================
+
+users:
+  - name: slurm
+    uid: 1000
+    groups: wheel
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+# =============================================================================
+# Directory Setup
+# =============================================================================
+
+runcmd:
+  # Create Slurm directories
+  - mkdir -p /var/spool/slurmctld
+  - mkdir -p /var/spool/slurmd
+  - mkdir -p /etc/slurm
+  - mkdir -p /opt/hpc
+  - mkdir -p /shared/slurm-state
+  - chown -R slurm:slurm /var/spool/slurmctld
+  - chown -R slurm:slurm /var/spool/slurmd
+
+  # Mount EFS for Slurm state
+  - |
+    if grep -q "efs" /etc/fstab; then
+      echo "EFS already mounted"
+    else
+      EFS_ID=$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r '.accountId')-efs.$(curl -s http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r '.region').amazonaws.com:/ /shared/slurm-state efs defaults,fsport=2049,x-systemd.automount 0 0
+      echo "$EFS_ID" >> /etc/fstab
+      mount -a
+    fi
+
+  # Create and configure /shared/slurm-state
+  - chown -R slurm:slurm /shared/slurm-state
+  - chmod -R 755 /shared/slurm-state
+
+  # Copy Slurm configuration templates
+  - cp /opt/hpc/slurm.conf /etc/slurm/slurm.conf
+  - cp /opt/hpc/slurmdbd.conf /etc/slurm/slurmdbd.conf
+  - cp /opt/hpc/cgroup.conf /etc/slurm/cgroup.conf
+
+  # Set proper permissions on Slurm config
+  - chown -R slurm:slurm /etc/slurm
+  - chmod 600 /etc/slurm/slurm.conf
+  - chmod 600 /etc/slurm/slurmdbd.conf
+  - chmod 600 /etc/slurm/cgroup.conf
+
+  # Set up Munge key from Secrets Manager
+  - |
+    if [ -f /opt/hpc/munge_key ]; then
+      # Munge key was pre-fetched by user_data
+      cp /opt/hpc/munge_key /etc/munge/munge.key
+      chown munge:munge /etc/munge/munge.key
+      chmod 400 /etc/munge/munge.key
+    else
+      # Fetch Munge key from Secrets Manager
+      MUNGE_KEY=$(aws secretsmanager get-secret-value --secret-id ${MUNGE_KEY_SECRET_ARN} --query SecretString --output text | jq -r '.munge_key' | base64 -d)
+      echo "$MUNGE_KEY" > /opt/hpc/munge_key
+      cp /opt/hpc/munge_key /etc/munge/munge.key
+      chown munge:munge /etc/munge/munge.key
+      chmod 400 /etc/munge/munge.key
+    fi
+
+  # Initialize MariaDB (if enabled)
+  - |
+    if [ "${ENABLE_MARIADB}" = "true" ]; then
+      # Initialize MariaDB if not already done
+      if [ ! -f /var/lib/mysql/ibdata1 ]; then
+        mysql_install_db --user=mysql --datadir=/var/lib/mysql
+        systemctl start mariadb
+        sleep 10
+        mysql -u root <<EOF
+          CREATE DATABASE IF NOT EXISTS ${MARIADB_DB_NAME};
+          CREATE USER '${MARIADB_USERNAME}'@'localhost' IDENTIFIED BY '${MARIADB_PASSWORD}';
+          CREATE USER '${MARIADB_USERNAME}'@'%' IDENTIFIED BY '${MARIADB_PASSWORD}';
+          GRANT ALL PRIVILEGES ON ${MARIADB_DB_NAME}.* TO '${MARIADB_USERNAME}'@'localhost';
+          GRANT ALL PRIVILEGES ON ${MARIADB_DB_NAME}.* TO '${MARIADB_USERNAME}'@'%';
+          FLUSH PRIVILEGES;
+        EOF
+        systemctl stop mariadb
+      fi
+    fi
+
+  # Start MariaDB
+  - |
+    if [ "${ENABLE_MARIADB}" = "true" ]; then
+      systemctl enable mariadb
+      systemctl start mariadb
+    fi
+
+  # Configure slurmdbd
+  - |
+    if [ "${ENABLE_MARIADB}" = "true" ]; then
+      # Configure slurmdbd to connect to MariaDB
+      sed -i "s/DBDHost=.*/DBDHost=localhost/" /etc/slurm/slurmdbd.conf
+      sed -i "s/DbdPort=.*/DbdPort=3306/" /etc/slurm/slurmdbd.conf
+      sed -i "s/DbdAuth=.*/DbdAuth=auth\/mysql/" /etc/slurm/slurmdbd.conf
+      sed -i "s/DbdParams=.*/DbdParams=localhost,${MARIADB_DB_NAME},${MARIADB_USERNAME},${MARIADB_PASSWORD}/" /etc/slurm/slurmdbd.conf
+    fi
+
+  # Start Slurm services
+  - systemctl enable slurmctld
+  - systemctl enable slurmd
+  - systemctl enable slurmdbd
+  - systemctl start slurmctld
+  - systemctl start slurmd
+  - systemctl start slurmdbd
+
+  # Record instance metadata
+  - |
+    INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+    PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+    echo "Controller instance ${INSTANCE_ID} (IP: ${PRIVATE_IP}) initialized at $(date)" >> /var/log/controller-init.log
+
+# =============================================================================
+# System Configuration
+# =============================================================================
+
+system_info:
+  default_user:
+    name: ec2-user
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+final_message: "Slurm controller node is fully configured after $UPTIME seconds"

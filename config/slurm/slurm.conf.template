@@ -1,0 +1,141 @@
+# Slurm controller configuration file
+# Template - Replace variables with actual values
+
+# =============================================================================
+# Slurm Controller Configuration
+# =============================================================================
+
+# Cluster name
+ClusterName=hpc-cluster
+
+# Slurm controller configuration
+SlurmctldHost={{ slurm_controller_hostname }}({{ slurm_controller_private_ip }})
+
+# Slurm user
+SlurmUser=slurm
+
+# Slurm directory configuration
+SlurmctldPidFile=/var/spool/slurmctld/slurmctld.pid
+SlurmctldLogDir=/var/log/slurmctld
+SlurmctldPort=6817
+
+# Slurmd configuration
+SlurmdPidFile=/var/spool/slurmd/slurmd.pid
+SlurmdLogDir=/var/log/slurmd
+SlurmdPort=6818
+
+# Spool directory
+SlurmSpoolDir=/var/spool/slurm
+
+# State storage configuration
+SlurmStateDir=/shared/slurm-state
+
+# Slurmdbd configuration (for accounting)
+SlurmctldSyslogDebug=info
+SlurmctldDebug=info
+
+# =============================================================================
+# Authentication Configuration
+# =============================================================================
+
+# Munge authentication
+AuthType=auth/munge
+AuthArgs=ConfigureMungeKey=yes
+
+# Credential lifecycle
+CredType=cred/munge
+KeyLength=64
+RotatingTime=7d
+CycleLength=30s
+
+# =============================================================================
+# Partition Definitions
+# =============================================================================
+
+# Default partition - debug (static, always-on nodes for testing)
+PartitionName=debug Priority=50 Default=YES MaxTime=24:00:00 State=UP
+Nodes={{ debug_node_hostname }}({{ debug_node_private_ip }}) State=UNKNOWN
+
+# Standard partition - cloud nodes with power management
+PartitionName=std Priority=40 Default=NO MaxTime=7-00:00:00 State=UP
+Nodes={{ std_node_prefix }}[1-{{ std_node_count }}] State=UNKNOWN
+
+# =============================================================================
+# Node Definitions
+# =============================================================================
+
+# Debug node (static, always-on for canaries)
+NodeName={{ debug_node_hostname }} NodeAddr={{ debug_node_private_ip }} CPUs=2 State=UNKNOWN
+
+# Standard partition nodes (cloud nodes with power management)
+{% for i in range(1, std_node_count + 1) %}
+NodeName={{ std_node_prefix }}{{ i }} NodeAddr={{ std_node_prefix }}{{ i }}.hpc.internal CPUs=2 State=UNKNOWN
+{% endfor %}
+
+# =============================================================================
+# Power Management Settings
+# =============================================================================
+
+# Power saving configuration
+ResumeProgram=/opt/hpc/scripts/resume_nodes.sh
+SuspendProgram=/opt/hpc/scripts/suspend_nodes.sh
+SuspendTime=300
+SuspendTimeout=90
+ResumeTimeout=300
+ResumeRate=100
+SuspendRate=100
+
+# Power save settings
+PowerSave=NO
+PowerProgram=/opt/hpc/scripts/power_save.sh
+
+# =============================================================================
+# Accounting Configuration
+# =============================================================================
+
+# Enable accounting
+AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost={{ slurm_controller_hostname }}
+AccountingStoragePort={{ slurmdbd_port }}
+AccountingStorageUser=slurm
+AccountingStoragePass=slurm
+AccountingStoreJobComment=YES
+AccountingStoreFlags=job_script
+
+# =============================================================================
+# Job Configuration
+# =============================================================================
+
+# Job scheduling
+SchedulerType=sched/backfill
+SchedulerPort=7030
+SelectType=select/linear
+NodeName=DEBUG MaxTime=24:00:00 State=UP
+
+# Job defaults
+DefMemPerCPU=1024
+MaxMemPerCPU=4096
+MinMemPerNode=0
+
+# =============================================================================
+# Logging Configuration
+# =============================================================================
+
+SlurmctldDebug=info
+SlurmctldLogFile=/var/log/slurmctld/slurmctld.log
+SlurmdDebug=info
+SlurmdLogFile=/var/log/slurmd/slurmd.log
+
+# =============================================================================
+# Security Configuration
+# =============================================================================
+
+# Enable job validation
+JobSubmitPlugins=lua
+
+# =============================================================================
+# GRES Configuration (Generic Resources)
+# =============================================================================
+
+# GPU configuration (if applicable)
+GresTypes=gpu

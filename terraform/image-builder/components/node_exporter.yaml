@@ -1,0 +1,51 @@
+version: 1.0
+name: node-exporter
+description: |
+  Install and configure node_exporter for system metrics.
+
+parameters:
+  - node_exporter_version:
+      description: "node_exporter version to install"
+      default: "1.7.0"
+
+steps:
+  - name: DownloadNodeExporter
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Download node_exporter
+          cd /tmp
+          curl -LO "https://github.com/prometheus/node_exporter/releases/download/v${node_exporter_version}/node_exporter-${node_exporter_version}.linux-amd64.tar.gz"
+          tar -xzf "node_exporter-${node_exporter_version}.linux-amd64.tar.gz"
+          mv "node_exporter-${node_exporter_version}.linux-amd64/node_exporter" /usr/local/bin/
+          rm -rf "node_exporter-${node_exporter_version}.linux-amd64"*
+
+  - name: ConfigureNodeExporterService
+    action: ExecuteBash
+    inputs:
+      commands:
+        - |
+          # Create node_exporter user
+          id -u node_exporter >/dev/null 2>&1 || useradd -r -s /sbin/nologin node_exporter
+
+          # Create service file
+          cat > /etc/systemd/system/node_exporter.service <<EOF
+          [Unit]
+          Description=Node Exporter
+          After=network.target
+
+          [Service]
+          User=node_exporter
+          Group=node_exporter
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Enable and start service
+          systemctl daemon-reload
+          systemctl enable node_exporter
+          systemctl restart node_exporter

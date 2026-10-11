@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "mkdir-image-builder",
+      "trigger": "SessionStart",
+      "description": "Create image-builder module directory",
+      "action": {
+        "type": "command",
+        "command": "mkdir -p /Users/yohannesm/cguru/hpc-testbed/terraform/image-builder"
+      }
+    }
+  ]
+}

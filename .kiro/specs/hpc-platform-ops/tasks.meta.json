@@ -1,0 +1,346 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "4. Bootstrap security base: KMS, CloudTrail, Config **[LOCAL] [Q]**": [
+      {
+        "executionId": "6e81fc74-1565-497f-83f9-44cbb6d52f22",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645201744
+      },
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288279
+      },
+      {
+        "executionId": "b7100d7e-40d8-48c6-99b0-1fa6bb1f9cec",
+        "chatSessionId": "sess_f271ae93-91a7-421b-bb63-8065709a6fbf",
+        "timestamp": 1791659855772
+      },
+      {
+        "executionId": "b7100d7e-40d8-48c6-99b0-1fa6bb1f9cec",
+        "chatSessionId": "sess_f271ae93-91a7-421b-bb63-8065709a6fbf",
+        "timestamp": 1791662596359
+      }
+    ],
+    "1. Scaffold the repository **[LOCAL] [Q]**": [
+      {
+        "executionId": "fbb69506-c8d0-45ab-ad76-30b69e912cec",
+        "chatSessionId": "sess_77e41581-ccef-445f-9e3e-621180532ef4",
+        "timestamp": 1791645277433
+      },
+      {
+        "executionId": "fbb69506-c8d0-45ab-ad76-30b69e912cec",
+        "chatSessionId": "sess_77e41581-ccef-445f-9e3e-621180532ef4",
+        "timestamp": 1791645279720
+      }
+    ],
+    "2. Implement sandbox guardrails **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288208
+      },
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645303793
+      },
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645748614
+      }
+    ],
+    "3. Write the preflight and lifecycle scripts **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288248
+      },
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645764010
+      },
+      {
+        "executionId": "01204b2c-ec6d-4427-bb0b-89247e7959ad",
+        "chatSessionId": "sess_1155230c-4b43-46c8-8b10-fbf7bb8e18bd",
+        "timestamp": 1791659253675
+      }
+    ],
+    "5. Network module **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288323
+      },
+      {
+        "executionId": "2a8cf4d9-59a7-425a-afc2-dfbaf57a981c",
+        "chatSessionId": "sess_1155230c-4b43-46c8-8b10-fbf7bb8e18bd",
+        "timestamp": 1791662837859
+      }
+    ],
+    "6. Network diagnostic runbook and ADRs **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288353
+      },
+      {
+        "executionId": "2a8cf4d9-59a7-425a-afc2-dfbaf57a981c",
+        "chatSessionId": "sess_1155230c-4b43-46c8-8b10-fbf7bb8e18bd",
+        "timestamp": 1791663546319
+      }
+    ],
+    "7. Storage module (EFS baseline) **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288382
+      },
+      {
+        "executionId": "9c033cba-4977-44d8-a1fb-50b35c8cffbf",
+        "chatSessionId": "sess_1155230c-4b43-46c8-8b10-fbf7bb8e18bd",
+        "timestamp": 1791665184619
+      }
+    ],
+    "8. Optional FSx for Lustre module **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288413
+      },
+      {
+        "executionId": "c9b3ee74-2e38-4e4f-b3b3-371e57b29ad0",
+        "chatSessionId": "sess_1155230c-4b43-46c8-8b10-fbf7bb8e18bd",
+        "timestamp": 1791665600368
+      }
+    ],
+    "9. Node image recipe **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288441
+      },
+      {
+        "executionId": "27c57acf-29e3-47a8-98c5-091124472348",
+        "chatSessionId": "sess_1155230c-4b43-46c8-8b10-fbf7bb8e18bd",
+        "timestamp": 1791665994719
+      }
+    ],
+    "10. Controller module and config templates **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288471
+      },
+      {
+        "executionId": "aade403c-2b81-485f-9604-594198e3bffe",
+        "chatSessionId": "sess_f271ae93-91a7-421b-bb63-8065709a6fbf",
+        "timestamp": 1791707517833
+      },
+      {
+        "executionId": "3a5b6652-3dfb-4280-88a1-70c18807af6f",
+        "chatSessionId": "sess_8e4bc412-e9c4-45db-98e6-585246cd70d4",
+        "timestamp": 1791710189739
+      }
+    ],
+    "11. Login node and static debug node **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288499
+      }
+    ],
+    "12. Resume and suspend programs **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288531
+      }
+    ],
+    "13. Scheduler smoke tests **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288562
+      }
+    ],
+    "14. First live deployment: network, controller, login, debug node **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288590
+      }
+    ],
+    "15. Live elastic compute test **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288623
+      }
+    ],
+    "16. Ops CLI **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288656
+      }
+    ],
+    "17. Scheduler runbooks **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288701
+      }
+    ],
+    "18. Rehearse the ops procedures **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288738
+      }
+    ],
+    "19. Monitoring node and dashboards **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288766
+      }
+    ],
+    "20. Probes, canaries and custom metrics **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288798
+      }
+    ],
+    "21. Alarms with enforced metadata **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288829
+      }
+    ],
+    "22. Status portal and ALB **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288857
+      }
+    ],
+    "23. Observability go-live and tuning **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288885
+      }
+    ],
+    "24. Inspector findings and AMI promotion **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288914
+      }
+    ],
+    "25. Patch windows **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288947
+      }
+    ],
+    "26. Directory and access (try, with fallback) **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645288973
+      }
+    ],
+    "27. Image and patch live run **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289007
+      }
+    ],
+    "28. Security services and evidence collector **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289039
+      }
+    ],
+    "29. Evidence run **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289066
+      }
+    ],
+    "30. FIS experiment templates **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289100
+      }
+    ],
+    "31. Incident process and PIR template **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289139
+      }
+    ],
+    "32. Run the experiments and write the PIRs **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289171
+      }
+    ],
+    "33. GitHub Actions static gates **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289198
+      }
+    ],
+    "34. Plan, apply and drift targets **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289230
+      }
+    ],
+    "35. Service report and capacity forecast **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289261
+      }
+    ],
+    "36. Design-only ADRs **[LOCAL] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289289
+      }
+    ],
+    "37. Final end-to-end run **[SANDBOX] [Q]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289316
+      }
+    ],
+    "38. Portfolio README **[LOCAL] [S]**": [
+      {
+        "executionId": "593e0dfc-85ac-4891-b3ab-b37863ae7620",
+        "chatSessionId": "sess_8f18a084-e89d-4b1d-9fb0-33e8014484c0",
+        "timestamp": 1791645289347
+      }
+    ]
+  }
+}
