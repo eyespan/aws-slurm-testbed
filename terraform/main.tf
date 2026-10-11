@@ -122,6 +122,42 @@ module "fsx" {
 }
 
 # =============================================================================
+# Login Node Module
+# =============================================================================
+
+module "login" {
+  source = "./login"
+
+  project                  = var.project
+  env                      = var.env
+  session                  = var.session
+  vpc_id                   = module.network.vpc_id
+  public_subnet_ids        = module.network.public_subnet_ids
+  private_subnet_ids       = module.network.private_subnet_ids
+  security_group_ids       = module.network.security_group_ids
+  kms_key_arns             = module.bootstrap.kms_key_arns
+  efs_file_system_id       = module.storage.file_system_id
+  munge_key_secret_arn     = module.controller.munge_key_secret_arn
+  private_hosted_zone_id   = module.network.private_hosted_zone_id
+  private_hosted_zone_name = module.network.private_hosted_zone_name
+  ami_id                   = data.aws_ssm_parameter.ami_current.value
+  controller_instance_ip   = module.controller.controller_instance_private_ip
+  controller_iam_role_arn  = module.controller.iam_role_arn
+  slurm_version            = var.slurm_version
+  enable_mariadb           = var.enable_mariadb
+  mariadb_endpoint         = var.enable_mariadb ? module.controller.mariadb_endpoint : ""
+  mariadb_port             = var.enable_mariadb ? module.controller.mariadb_port : ""
+  mariadb_db_name          = var.mariadb_db_name
+  mariadb_username         = var.mariadb_username
+  ssh_key_name             = var.ssh_key_name
+  allowed_ssh_cidr_blocks  = var.allowed_ssh_cidr_blocks
+  ebs_volume_size          = var.ebs_volume_size
+  ebs_volume_type          = var.ebs_volume_type
+  ebs_volume_iops          = var.ebs_volume_iops
+  ebs_volume_throughput    = var.ebs_volume_throughput
+}
+
+# =============================================================================
 # Image Builder Module
 # =============================================================================
 
@@ -368,4 +404,43 @@ output "mariadb_endpoint" {
 output "mariadb_port" {
   description = "Port of the MariaDB instance"
   value       = module.controller.mariadb_port
+}
+
+# =============================================================================
+# Login Node Module Outputs
+# =============================================================================
+
+output "login_node_instance_id" {
+  description = "ID of the login node instance"
+  value       = module.login.login_node_instance_id
+}
+
+output "login_node_instance_private_ip" {
+  description = "Private IP of the login node"
+  value       = module.login.login_node_instance_private_ip
+}
+
+output "login_node_instance_public_ip" {
+  description = "Public IP of the login node (for SSH access)"
+  value       = module.login.login_node_instance_public_ip
+}
+
+output "debug_node_instance_id" {
+  description = "ID of the debug node instance"
+  value       = module.login.debug_node_instance_id
+}
+
+output "debug_node_instance_private_ip" {
+  description = "Private IP of the debug node"
+  value       = module.login.debug_node_instance_private_ip
+}
+
+output "login_node_security_group_id" {
+  description = "ID of the login node security group"
+  value       = module.login.login_node_security_group_id
+}
+
+output "debug_node_security_group_id" {
+  description = "ID of the debug node security group"
+  value       = module.login.debug_node_security_group_id
 }

@@ -142,3 +142,79 @@ variable "image_termination_date" {
   type        = string
   default     = ""
 }
+
+variable "enable_mariadb" {
+  description = "Enable MariaDB RDS instance for slurmdbd"
+  type        = bool
+  default     = true
+}
+
+variable "mariadb_instance_class" {
+  description = "RDS instance class for MariaDB"
+  type        = string
+  default     = "db.t4g.micro"
+}
+
+variable "mariadb_allocated_storage" {
+  description = "Allocated storage for MariaDB in GB"
+  type        = number
+  default     = 20
+}
+
+variable "mariadb_username" {
+  description = "Master username for MariaDB"
+  type        = string
+  default     = "slurm"
+}
+
+variable "mariadb_db_name" {
+  description = "Database name for Slurm accounting"
+  type        = string
+  default     = "slurm_acct_db"
+}
+
+variable "mariadb_password" {
+  description = "Master password for MariaDB"
+  type        = string
+  default     = "change_me"
+
+  validation {
+    condition     = length(var.mariadb_password) >= 8
+    error_message = "MariaDB password must be at least 8 characters."
+  }
+}
+
+variable "ebs_volume_size" {
+  description = "Size of EBS volume for instances in GB"
+  type        = number
+  default     = 50
+}
+
+variable "ebs_volume_type" {
+  description = "Type of EBS volume"
+  type        = string
+  default     = "gp3"
+
+  validation {
+    condition     = contains(["gp2", "gp3", "io1", "io2", "sc1", "st1"], var.ebs_volume_type)
+    error_message = "EBS volume type must be one of: gp2, gp3, io1, io2, sc1, st1."
+  }
+}
+
+variable "ebs_volume_iops" {
+  description = "IOPS for EBS volume (only for io1/io2/gp3)"
+  type        = number
+  default     = 3000
+}
+
+variable "ebs_volume_throughput" {
+  description = "Throughput for EBS volume (only for gp3)"
+  type        = number
+  default     = 125
+}
+
+variable "allowed_ssh_cidr_blocks" {
+  description = "CIDR blocks allowed to SSH to login node"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}

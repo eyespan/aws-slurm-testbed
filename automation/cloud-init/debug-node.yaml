@@ -1,0 +1,165 @@
+#cloud-config
+# Cloud-init script for Slurm debug node setup
+# This script runs on instance boot to configure Slurm compute node
+
+# =============================================================================
+# Package Updates and Installation
+# =============================================================================
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - wget
+  - curl
+  - nfs-utils
+  - python3-pip
+  - jq
+  - slurm-slurmd
+  - slurm-client
+
+# =============================================================================
+# User and Group Setup
+# =============================================================================
+
+users:
+  - name: slurm
+    uid: 1000
+    groups: wheel
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+  - name: munge
+    uid: 1001
+    groups: wheel
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+# =============================================================================
+# Directory Setup
+# =============================================================================
+
+runcmd:
+  # Create Slurm directories
+  - mkdir -p /var/spool/slurmd
+  - mkdir -p /etc/slurm
+  - mkdir -p /opt/hpc
+  - mkdir -p /shared/slurm-state
+  - mkdir -p /etc/munge
+  - mkdir -p /var/log/munge
+  - chown -R slurm:slurm /var/spool/slurmd
+
+  # Mount EFS for Slurm state
+  - |
+    if ! grep -q "efs" /etc/fstab; then
+      EFS_ID="${efs_file_system_id}:/ /shared/slurm-state efs defaults,fsport=2049,x-systemd.automount 0 0"
+      echo "$EFS_ID" >> /etc/fstab
+      mount -a
+      echo "EFS mounted successfully"
+    else
+      echo "EFS already mounted"
+    fi
+
+  # Create and configure /shared
+  - mkdir -p /shared
+  - chown -R slurm:slurm /shared
+  - chmod -R 755 /shared
+
+  # Configure nsswitch.conf to use files for user lookup
+  - |
+    if [ -f /etc/nsswitch.conf ]; then
+      sed -i 's/^passwd:.*/passwd:     files/' /etc/nsswitch.conf
+      sed -i 's/^shadow:.*/shadow:     files/' /etc/nsswitch.conf
+      sed -i 's/^group:.*/group:      files/' /etc/nsswitch.conf
+      echo "nsswitch.conf configured"
+    fi
+
+  # Fetch Munge key from Secrets Manager
+  - |
+    if [ -f /usr/bin/aws ]; then
+      MUNGE_KEY=$(aws secretsmanager get-secret-value --secret-id ${munge_key_secret_arn} --query SecretString --output text 2>/dev/null | jq -r '.munge_key' | base64 -d)
+      if [ -n "$MUNGE_KEY" ]; then
+        echo "$MUNGE_KEY" > /etc/munge/munge.key
+        chown munge:munge /etc/munge/munge.key
+        chmod 400 /etc/munge/munge.key
+        echo "Munge key configured"
+      else
+        echo "Failed to retrieve Munge key from Secrets Manager"
+      fi
+    else
+      echo "AWS CLI not found, skipping Munge key configuration"
+    fi
+
+  # Start Munge service
+  - |
+    systemctl enable munge 2>/dev/null || true
+    systemctl start munge 2>/dev/null || true
+    echo "Munge service started"
+
+  # Install and configure Slurm compute node
+  - |
+    # Create Slurm configuration
+    cat > /opt/hpc/slurm.conf <<'SLURMCONF'
+# Slurm compute node configuration
+ClusterName=hpc-cluster
+SlurmctldHost=${controller_hostname}
+SlurmUser=slurm
+SlurmctldPidFile=/var/spool/slurmctld/slurmctld.pid
+SlurmctldLogDir=/var/log/slurmctld
+SlurmctldPort=6817
+SlurmdPidFile=/var/spool/slurmd/slurmd.pid
+SlurmdLogDir=/var/log/slurmd
+SlurmdPort=6818
+SlurmSpoolDir=/var/spool/slurm
+SlurmStateDir=/shared/slurm-state
+AuthType=auth/munge
+CredType=cred/munge
+AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost=${controller_hostname}
+AccountingStoragePort=6819
+PartitionName=debug Priority=50 Default=YES MaxTime=24:00:00 State=UP Nodes=${node_hostname}
+PartitionName=std Priority=40 Default=NO MaxTime=7-00:00:00 State=UP Nodes=std-[1-3]
+NodeName=${node_hostname} NodeAddr=${node_hostname}.${private_hosted_zone_name} CPUs=2
+NodeName=std-1 NodeAddr=std-1.hpc.internal CPUs=2
+NodeName=std-2 NodeAddr=std-2.hpc.internal CPUs=2
+NodeName=std-3 NodeAddr=std-3.hpc.internal CPUs=2
+SuspendTime=300
+SchedulerType=sched/backfill
+SLURMCONF
+
+    # Copy configuration to Slurm config directory
+    cp /opt/hpc/slurm.conf /etc/slurm/slurm.conf
+    chown -R slurm:slurm /etc/slurm
+    chmod 600 /etc/slurm/slurm.conf
+    echo "Slurm compute node configured"
+
+  # Configure debug partition for static node
+  - |
+    cat > /etc/slurm/partition_debug.conf <<'PARTITION'
+# Debug partition configuration for static node
+PartitionName=debug Priority=50 Default=YES MaxTime=24:00:00 State=UP Nodes=${node_hostname} State=UNKNOWN
+PARTITION
+    echo "Debug partition configured"
+
+  # Enable and start Slurmd
+  - |
+    systemctl enable slurmd
+    systemctl start slurmd
+    echo "Slurmd service started"
+
+  # Record instance metadata
+  - |
+    INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+    PRIVATE_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)
+    echo "Debug node ${INSTANCE_ID} (IP: ${PRIVATE_IP}) initialized at $(date)" >> /var/log/debug-init.log
+
+# =============================================================================
+# System Configuration
+# =============================================================================
+
+system_info:
+  default_user:
+    name: ec2-user
+    sudo: ALL=(ALL) NOPASSWD:ALL
+
+final_message: "Slurm debug node is fully configured after $UPTIME seconds"
