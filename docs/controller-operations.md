@@ -122,6 +122,7 @@ sacctmgr show cluster
 
 # Test MariaDB connection
 mysql -u slurm -p -e "SHOW DATABASES"
+mysql -h hpc-testbed-dev-070bc5b7-mariadb.c78uuyai6glq.us-east-1.rds.amazonaws.com -P 3306 -u slurm -p -e "SHOW DATABASES;"
 ```
 
 ## Recovery Procedures
@@ -215,6 +216,7 @@ systemctl restart mariadb
 
 ```bash
 mysql -u slurm -p -e "SELECT 1"
+mysql -h hpc-testbed-dev-070bc5b7-mariadb.c78uuyai6glq.us-east-1.rds.amazonaws.com -P 3306 -u slurm -p -e "SELECT 1"
 ```
 
 4. Check Slurmdbd connection
