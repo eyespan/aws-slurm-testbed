@@ -1,0 +1,15 @@
+# Local users provisioned on the login node (and available via shared /home on EFS).
+# Used when directory services are disabled (default).
+users:
+  - name: hpcuser
+    uid: 2000
+    groups: [users]
+    shell: /bin/bash
+    home: /home/hpcuser
+    ssh_keys: []
+  - name: operator
+    uid: 2001
+    groups: [users, wheel]
+    shell: /bin/bash
+    home: /home/operator
+    ssh_keys: []

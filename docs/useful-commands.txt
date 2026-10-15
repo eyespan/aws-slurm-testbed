@@ -1,0 +1,121 @@
+Login node:
+
+free -h
+nproc --all
+who
+
+squeue --me           # list the jobs for my user
+squeue -u <username>  # list the jobs for a specific user
+
+seff JOBID            # see more information for a job
+
+sacct --format JobName,Account,State,AllocCPUs,ReqMem,MaxRSS,AveRSS,Elapsed -j JOBID. #llows displaying this and other information in a more condensed way (and for multiple jobs if you want to).
+
+sacct -S 2024-01-01 -E 2024-02-01 --format=JobID,JobName,Start,End,State
+
+
+scontrol show job <JOBID>    #more details about a job, such as the working directory and output directories
+
+scancel <JOBID>     #cancel a job,
+
+
+sintr    #Interactive access to a terminal on one of the compute nodes
+
+sintr -c 8 --mem=10G -p icelake -t 01:00:00 -A TRAINING-CPU    #Access to 8 CPUs and 10GB of RAM for 1h on one of the compute nodes
+
+
+explore : Visual Studio Code is a text editor that can be used to edit files directly on the HPC using the “Remote-SSH” extension.
+
+ec2-user@ip-10-0-0-211 scripts]$ sbatch simple_job.sh
+Submitted batch job 12
+
+[ec2-user@ip-10-0-0-211 scripts]$ seff 12
+-bash: seff: command not found
+
+
+[ec2-user@ip-10-0-0-211 scripts]$ squeue -u ec2-user
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+                12     debug simple_j ec2-user  R       0:02      1 debug-1
+
+
+[ec2-user@ip-10-0-0-211 scripts]$ squeue -u ec2-user
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+                13     debug simple_j ec2-user  R       0:03      1 debug-1
+
+
+[ec2-user@ip-10-0-0-211 scripts]$ squeue -u ec2-user
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+                12     debug simple_j ec2-user  R       0:02      1 debug-1
+[ec2-user@ip-10-0-0-211 scripts]$ seff 12
+-bash: seff: command not found
+[ec2-user@ip-10-0-0-211 scripts]$ sacct
+Slurm accounting storage is disabled
+[ec2-user@ip-10-0-0-211 scripts]$ sacct --format JobName,Account,State,AllocCPUs,ReqMem,MaxRSS,AveRSS,Elapsed -j JOBID
+sacct: fatal: Bad 
+
+
+[root@debug-1 ~]#  ls /home/ec2-user/scripts/
+job_logs  simple_job.log  slurm-9.out
+[root@debug-1 ~]#  ls /home/ec2-user/scripts/job_logs/
+simple_job.log
+
+
+[root@debug-1 ~]# squeue -u ec2-user
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+                12     debug simple_j ec2-user  R       0:07      1 debug-1
+
+
+root@hpc-testbed-controller ~]# scontrol show job 12
+JobId=12 JobName=simple_job.sh
+   UserId=ec2-user(1000) GroupId=ec2-user(1000) MCS_label=N/A
+   Priority=4294901748 Nice=0 Account=(null) QOS=(null)
+   JobState=COMPLETED Reason=None Dependency=(null)
+   Requeue=1 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:00:08 TimeLimit=1-00:00:00 TimeMin=N/A
+   SubmitTime=2026-10-13T17:54:00 EligibleTime=2026-10-13T17:54:00
+   AccrueTime=2026-10-13T17:54:00
+   StartTime=2026-10-13T17:54:00 EndTime=2026-10-13T17:54:08 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-13T17:54:00 Scheduler=Backfill
+   Partition=debug AllocNode:Sid=ip-10-0-0-211:83798
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=debug-1
+   BatchHost=debug-1
+   NumNodes=1 NumCPUs=1 NumTasks=1 CPUs/Task=1 ReqB:S:C:T=0:0:*:*
+   ReqTRES=cpu=1,mem=1M,node=1,billing=1
+   AllocTRES=cpu=1,node=1,billing=1
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=0 MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=OK Contiguous=0 Licenses=(null) Network=(null)
+   Command=/home/ec2-user/scripts/simple_job.sh
+   WorkDir=/home/ec2-user/scripts
+   StdErr=/home/ec2-user/scripts/simple_job.log
+   StdIn=/dev/null
+   StdOut=/home/ec2-user/scripts/simple_job.log
+   Power=
+   
+
+
+[ec2-user@ip-10-0-0-211 scripts]$ sbatch parallel_arrays.sh 
+
+root@debug-1 ~]#  ls /home/ec2-user/scripts/
+job_logs  simple_job.log  slurm-9.out
+[root@debug-1 ~]#  ls /home/ec2-user/scripts/job_logs/
+parallel_arrays_1.log  parallel_arrays_2.log  parallel_arrays_3.log  simple_job.log
+[root@debug-1 ~]#  ls /home/ec2-user/scripts/job_logs/parallel_arrays_1.log 
+/home/ec2-user/scripts/job_logs/parallel_arrays_1.log
+[root@debug-1 ~]# cat /home/ec2-user/scripts/job_logs/parallel_arrays_1.log 
+This is task number 1
+Using  CPUs
+Running on:
+debug-1.hpc.internal
+[root@debug-1 ~]# cat /home/ec2-user/scripts/job_logs/parallel_arrays_2.log 
+This is task number 2
+Using  CPUs
+Running on:
+debug-1.hpc.internal
+[root@debug-1 ~]# cat /home/ec2-user/scripts/job_logs/parallel_arrays_3.log 
+This is task number 3
+Using  CPUs
+Running on:
+debug-1.hpc.internal

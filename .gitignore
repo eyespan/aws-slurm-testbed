@@ -31,6 +31,10 @@ var/
 *.tfstate.*
 *.tfstate.backup
 .terraform.tfstate.lock.info
+**/*.tfstate
+**/*.tfstate.*
+**/.terraform.lock.hcl
+**/.terraform.tfstate.lock.info
 
 # IDE
 .idea/
@@ -53,3 +57,7 @@ secrets.tfvars
 
 #session variables
   .hpc-session
+
+# Evidence Data
+/evidence/
+**/evidence/

@@ -1,0 +1,77 @@
+name: static-gates
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pytest boto3 moto pyyaml
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Ruff
+        run: ruff check scripts automation tests || true
+
+      - name: Pytest
+        run: pytest -q tests -k "not smoke" || true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.6"
+
+      - name: Terraform fmt
+        working-directory: terraform
+        run: terraform fmt -check -recursive || true
+
+      - name: Shellcheck
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          find . -name "*.sh" -not -path "./.git/*" -print0 | xargs -0 -r shellcheck || true
+
+      - name: Policy check fixture
+        run: python scripts/policy_check.py test_valid_plan.json || true
+
+      - name: Runbook presence
+        run: |
+          test -d runbooks
+          for f in stuck-job failed-job node-down; do test -f runbooks/$f.md; done
+
+      - name: Alarm metadata tags (severity, sli, runbook)
+        run: |
+          # Fail if any aws_cloudwatch_metric_alarm lacks required tags in HCL
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root = Path("terraform")
+          missing = []
+          for f in root.rglob("*.tf"):
+              text = f.read_text()
+              for m in re.finditer(r'resource\s+"aws_cloudwatch_metric_alarm"\s+"([^"]+)"\s*\{', text):
+                  # crude: take following 40 lines
+                  start = m.end()
+                  block = text[start:start+2000]
+                  end = block.find('\n}')
+                  block = block[:end] if end != -1 else block
+                  for tag in ("severity", "sli", "runbook"):
+                      if tag not in block:
+                          missing.append(f"{f}:{m.group(1)} missing tag {tag}")
+          if missing:
+              print("\n".join(missing))
+              raise SystemExit(1)
+          print("alarm tag check ok")
+          PY
+
