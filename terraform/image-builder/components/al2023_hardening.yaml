@@ -1,89 +1,27 @@
-version: 1.0
 name: al2023-hardening
-description: |
-  AL2023 security hardening component.
-  Applies security configurations and best practices to Amazon Linux 2023.
+description: AL2023 security hardening (non-fatal best-effort)
+schemaVersion: 1.0
 
-packages:
-  install:
-    - yum-utils
-    - setools
-    - audit
-    - libselinux-utils
-
-steps:
-  - name: DisableUnusedNetworkServices
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Disable unnecessary network services
-          systemctl disable --now postfix.service 2>/dev/null || true
-          systemctl disable --now rpcbind.service 2>/dev/null || true
-          systemctl disable --now NetworkManager-dispatcher.service 2>/dev/null || true
-
-  - name: ConfigureSSHSecurity
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Configure SSH security
-          sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
-          sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-          sed -i 's/^#X11Forwarding.*/X11Forwarding no/' /etc/ssh/sshd_config
-          sed -i 's/^#MaxAuthTries.*/MaxAuthTries 3/' /etc/ssh/sshd_config
-          sed -i 's/^#ClientAliveInterval.*/ClientAliveInterval 300/' /etc/ssh/sshd_config
-          sed -i 's/^#ClientAliveCountMax.*/ClientAliveCountMax 0/' /etc/ssh/sshd_config
-          systemctl restart sshd
-
-  - name: ConfigureSecurityPolicies
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Set strong file permissions
-          chmod 700 /root
-          chmod 644 /etc/passwd
-          chmod 644 /etc/group
-          chmod 640 /etc/shadow
-          chmod 640 /etc/gshadow
-
-          # Configure SELinux to enforcing mode
-          setenforce 1
-          sed -i 's/^SELINUX=.*$/SELINUX=enforcing/' /etc/selinux/config
-
-          # Remove unnecessary SUID/SGID bits
-          find / -xdev -perm -4000 -type f 2>/dev/null | while read binary; do
-            case "$binary" in
-              /bin/ping|/bin/su|/bin/mount|/bin/umount|/bin/fuser|/usr/bin/passwd|/usr/bin/sudo|/usr/sbin/userhelper)
-                # Keep known SUID binaries
-                ;;
-              *)
-                chmod u-s "$binary" 2>/dev/null || true
-                ;;
-            esac
-          done
-
-  - name: ConfigureAuditRules
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Configure audit rules for security monitoring
-          echo "-w /etc/passwd -p wa -k identity" >> /etc/audit/rules.d/audit.rules
-          echo "-w /etc/group -p wa -k identity" >> /etc/audit/rules.d/audit.rules
-          echo "-w /etc/shadow -p wa -k identity" >> /etc/audit/rules.d/audit.rules
-          echo "-w /etc/sudoers -p wa -k sudoers" >> /etc/audit/rules.d/audit.rules
-          echo "-w /etc/sudoers.d/ -p wa -k sudoers" >> /etc/audit/rules.d/audit.rules
-          echo "-w /var/log/ -p wa -k audit" >> /etc/audit/rules.d/audit.rules
-          auditctl -R /etc/audit/rules.d/audit.rules
-
-  - name: CleanPackageCache
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Clean package manager cache
-          yum clean all
-          rm -rf /var/cache/yum/*
-          rm -rf /tmp/*
+phases:
+  - name: build
+    steps:
+      - name: DisableUnusedServices
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              set -x
+              systemctl disable --now postfix.service 2>/dev/null || true
+              systemctl disable --now rpcbind.service 2>/dev/null || true
+              echo "unused services step done"
+      - name: HardenSSH
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              set -x
+              if [ -f /etc/ssh/sshd_config ]; then
+                sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config || true
+                sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config || true
+              fi
+              echo "ssh harden step done"

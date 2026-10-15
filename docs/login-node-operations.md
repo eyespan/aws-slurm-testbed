@@ -94,12 +94,23 @@ ls -la /shared/
 ### Checking Service Status
 
 ```bash
-# On login node
-systemctl status slurmctld slurmd munge
+# On login node (client only — no slurmctld/slurmd)
+systemctl status munge
+command -v sinfo && sinfo -V
+df -h /shared /shared/slurm-state
 
 # On debug node
 systemctl status slurmd munge
+
+# On controller
+systemctl status slurmctld munge
 ```
+
+Bootstrap notes (after `make up`):
+
+- Stock AL2023 AMIs are supported. The **controller** builds Slurm once and publishes it under `/shared/software/slurm` on EFS; login/debug wait for that path (or use `/opt/slurm` from an Image Builder AMI).
+- Login and debug attach `AmazonSSMManagedInstanceCore` so `aws ssm start-session` works once the agent registers (allow 1–2 minutes after boot).
+- Inter-node SSH uses a cluster key under `/shared/cluster/id_ed25519` (created by the controller). From the login node: `ssh ec2-user@<debug-private-ip>` or `ssh debug-1.hpc.internal`.
 
 ### Testing Connectivity
 
@@ -109,8 +120,10 @@ sinfo
 squeue
 scontrol show node
 
-# From login node, test SSH to debug node
+# From login node, test SSH to debug node (cluster key on EFS)
 ssh ec2-user@<debug-node-private-ip>
+# or
+ssh debug-1.hpc.internal
 
 # From debug node, test Slurm
 sinfo
@@ -155,7 +168,7 @@ sinfo
 scontrol show node
 
 # Run a test job
-echo "#!/bin/bash\nsleep 60" > test.sh
+echo '#!/bin/bash\nsleep 60' > test.sh
 chmod +x test.sh
 sbatch test.sh
 ```

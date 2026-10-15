@@ -238,6 +238,33 @@ def collect_ec2_info(evidence_dir):
     run_aws_command(["ec2", "describe-volumes"], ec2_dir / "volumes.json")
 
 
+
+def collect_patch_and_ami_info(evidence_dir):
+    """Collect patch compliance and AMI inventory (Task 28)."""
+    print("Collecting patch and AMI information...")
+    patch_dir = evidence_dir / "patch"
+    patch_dir.mkdir(exist_ok=True)
+    ami_dir = evidence_dir / "ami"
+    ami_dir.mkdir(exist_ok=True)
+
+    run_aws_command(
+        ["ssm", "describe-instance-patch-states"],
+        patch_dir / "instance_patch_states.json",
+    )
+    run_aws_command(
+        ["ssm", "describe-patch-baselines"],
+        patch_dir / "patch_baselines.json",
+    )
+    run_aws_command(
+        ["ec2", "describe-images", "--owners", "self"],
+        ami_dir / "owned_images.json",
+    )
+    run_aws_command(
+        ["ssm", "get-parameters-by-path", "--path", "/hpc-testbed/ami", "--recursive"],
+        ami_dir / "ssm_ami_params.json",
+    )
+
+
 def create_manifest(evidence_dir):
     """Create manifest with file hashes."""
     print("Creating manifest...")
@@ -289,6 +316,7 @@ def main():
     collect_security_hub_info(evidence_dir)
     collect_guardduty_info(evidence_dir)
     collect_ec2_info(evidence_dir)
+    collect_patch_and_ami_info(evidence_dir)
 
     # Create manifest
     manifest = create_manifest(evidence_dir)

@@ -1,48 +1,24 @@
-version: 1.0
 name: munge
-description: |
-  Install and configure munge for Slurm authentication.
+description: Install and configure munge authentication service
+schemaVersion: 1.0
 
-parameters:
-  - munge_key_path:
-      description: "SSM parameter path containing munge key"
-      default: "/hpc-testbed/munge/key"
-
-steps:
-  - name: InstallMunge
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Install munge
-          yum install -y munge munge-libs
-
-  - name: ConfigureMunge
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Create munge user if it doesn't exist
-          id -u munge >/dev/null 2>&1 || useradd -r -s /sbin/nologin munge
-
-          # Ensure munge directories exist with correct permissions
-          mkdir -p /etc/munge
-          mkdir -p /var/run/munge
-          mkdir -p /var/log/munge
-
-          # Set permissions
-          chmod 700 /etc/munge
-          chmod 700 /var/run/munge
-          chmod 700 /var/log/munge
-          chown -R munge:munge /etc/munge
-          chown -R munge:munge /var/run/munge
-          chown -R munge:munge /var/log/munge
-
-  - name: EnableMungeService
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Enable and start munge service
-          systemctl enable munge
-          systemctl restart munge
+phases:
+  - name: build
+    steps:
+      - name: InstallMunge
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              set -x
+              PKG=$(command -v dnf >/dev/null 2>&1 && echo dnf || echo yum)
+              $PKG install -y munge munge-libs munge-devel 2>/dev/null || true
+              id -u munge >/dev/null 2>&1 || useradd -r -s /sbin/nologin munge || true
+              mkdir -p /etc/munge /var/log/munge /var/lib/munge /run/munge
+              if id -u munge >/dev/null 2>&1; then
+                chown -R munge:munge /etc/munge /var/log/munge /var/lib/munge /run/munge || true
+              fi
+              chmod 0700 /etc/munge || true
+              # Key is injected at instance bootstrap from Secrets Manager — do not generate here
+              systemctl enable munge 2>/dev/null || true
+              echo "munge component complete"

@@ -54,11 +54,7 @@ resource "aws_cloudwatch_metric_alarm" "fsx_free_storage" {
   dimensions = {
     FileSystemId = aws_fsx_lustre_file_system.scratch[0].id
   }
-  alarm_actions = [
-    "arn:aws:automate:${data.aws_region.current.name}:ec2:notify"
-  ]
-
-  tags = {
+tags = {
     Name     = "${var.project}-${var.env}-${var.session}-fsx-free-storage"
     severity = "warning"
     sli      = "storage_health"

@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -23,6 +24,7 @@ var/
 *.egg
 
 # Terraform
+**/.terraform/
 .terraform/
 .terraform.lock.hcl
 *.tfstate
@@ -48,3 +50,6 @@ var/
 terraform.tfvars
 *.auto.tfvars
 secrets.tfvars
+
+#session variables
+  .hpc-session

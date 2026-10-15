@@ -37,11 +37,7 @@ resource "aws_cloudwatch_metric_alarm" "login_node_efs_burst_credits" {
   dimensions = {
     FileSystemId = var.efs_file_system_id
   }
-  alarm_actions = [
-    "arn:aws:automate:${data.aws_region.current.name}:ec2:notify"
-  ]
-
-  tags = {
+tags = {
     Project = var.project
     Env     = var.env
     Session = var.session
@@ -67,11 +63,7 @@ resource "aws_cloudwatch_metric_alarm" "login_node_efs_storage_utilization" {
   dimensions = {
     FileSystemId = var.efs_file_system_id
   }
-  alarm_actions = [
-    "arn:aws:automate:${data.aws_region.current.name}:ec2:notify"
-  ]
-
-  tags = {
+tags = {
     Project = var.project
     Env     = var.env
     Session = var.session
@@ -97,11 +89,7 @@ resource "aws_cloudwatch_metric_alarm" "login_node_efs_throughput" {
   dimensions = {
     FileSystemId = var.efs_file_system_id
   }
-  alarm_actions = [
-    "arn:aws:automate:${data.aws_region.current.name}:ec2:notify"
-  ]
-
-  tags = {
+tags = {
     Project = var.project
     Env     = var.env
     Session = var.session

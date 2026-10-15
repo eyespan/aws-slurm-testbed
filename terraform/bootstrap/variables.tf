@@ -59,3 +59,21 @@ variable "key_deletion_window" {
     error_message = "Key deletion window must be between 7 and 365 days."
   }
 }
+
+variable "create_config_recorder" {
+  description = "Create AWS Config recorder (max 1 per account/region)"
+  type        = bool
+  default     = false
+}
+
+variable "create_guardduty" {
+  description = "Create GuardDuty detector (max 1 per account/region)"
+  type        = bool
+  default     = false
+}
+
+variable "create_security_hub" {
+  description = "Enable Security Hub"
+  type        = bool
+  default     = false
+}

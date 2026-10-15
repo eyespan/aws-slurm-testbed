@@ -153,20 +153,16 @@ resource "aws_route_table_association" "public" {
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = var.single_nat_gateway ? aws_nat_gateway.main[0].id : null
-  }
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = var.single_nat_gateway ? null : aws_nat_gateway.multi[local.azs[0]].id
-  }
-
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-private-rt"
     Type = "private"
   }
+}
+
+resource "aws_route" "private_nat" {
+  route_table_id         = aws_route_table.private.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = var.single_nat_gateway ? aws_nat_gateway.main[0].id : aws_nat_gateway.multi[local.azs[0]].id
 }
 
 # Associate private subnets with private route table
@@ -275,6 +271,16 @@ resource "aws_security_group" "controller" {
     description = "EFS NFS (2049) from within VPC"
     from_port   = 2049
     to_port     = 2049
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+  }
+
+  # Ephemeral ports: debug/compute may reply or initiate on high ports (not only 6817/6818).
+  # SGs are stateful for established flows, but explicit allow covers asymmetric / srun paths.
+  ingress {
+    description = "Ephemeral TCP from VPC (debug/compute replies and high-port clients)"
+    from_port   = 1024
+    to_port     = 65535
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
@@ -455,7 +461,7 @@ resource "aws_vpc_endpoint_route_table_association" "s3" {
 data "aws_region" "current" {}
 
 resource "aws_cloudwatch_log_group" "flow_logs" {
-  name              = var.flow_logs_log_group_name
+  name              = "/aws/vpc-flow-logs/${var.project}-${var.env}-${var.session}"
   retention_in_days = 30
 
   tags = {

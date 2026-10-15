@@ -21,25 +21,30 @@ variable "session" {
 variable "vpc_id" {
   description = "ID of the VPC"
   type        = string
+  default     = ""
 }
 
 variable "private_subnet_ids" {
-  description = "List of private subnet IDs"
+  description = "List of private subnet IDs (from network module)"
   type        = list(string)
+  # Empty default allows validate; apply from root always passes real values
+  default     = []
 }
 
 variable "security_group_ids" {
   description = "Map of security group IDs from network module"
   type        = map(string)
+  default     = {}
 }
 
 variable "kms_key_arns" {
-  description = "Map of KMS key ARNs from bootstrap module"
+  description = "Map of KMS key ARNs from bootstrap module (secrets_manager, ebs, ...)"
   type        = map(string)
+  default     = {}
 }
 
 variable "efs_file_system_id" {
-  description = "ID of the EFS file system for Slurm state"
+  description = "ID of the EFS file system for shared state / software"
   type        = string
   default     = ""
 }
@@ -53,6 +58,7 @@ variable "efs_mount_target_ids" {
 variable "private_hosted_zone_id" {
   description = "ID of the Route 53 private hosted zone"
   type        = string
+  default     = ""
 }
 
 variable "private_hosted_zone_name" {
@@ -62,9 +68,9 @@ variable "private_hosted_zone_name" {
 }
 
 variable "slurm_version" {
-  description = "Slurm version to install"
+  description = "Slurm version to install (must match Image Builder SlurmVersion)"
   type        = string
-  default     = "23.02.4"
+  default     = "23.02.7"
 }
 
 variable "controller_instance_type" {
@@ -92,6 +98,7 @@ variable "debug_instance_type" {
 variable "ami_id" {
   description = "AMI ID for controller and compute nodes"
   type        = string
+  default     = ""
 }
 
 variable "enable_mariadb" {

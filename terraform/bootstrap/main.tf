@@ -14,17 +14,6 @@ terraform {
 
 data "aws_caller_identity" "current" {}
 
-provider "aws" {
-  region = var.aws_region
-
-  default_tags {
-    tags = {
-      Project = var.project
-      Env     = var.env
-      Session = var.session
-    }
-  }
-}
 
 # =============================================================================
 # KMS Keys - Customer-managed keys with rotation enabled
@@ -178,6 +167,49 @@ resource "aws_s3_bucket_versioning" "cloudtrail_logs" {
 # CloudTrail - With log file validation
 # =============================================================================
 
+data "aws_partition" "current" {}
+data "aws_region" "current" {}
+
+resource "aws_s3_bucket_policy" "cloudtrail_logs" {
+  bucket = aws_s3_bucket.cloudtrail_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AWSCloudTrailAclCheck"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:GetBucketAcl"
+        Resource  = aws_s3_bucket.cloudtrail_logs.arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/${var.project}-${var.env}-${var.session}-cloudtrail"
+          }
+        }
+      },
+      {
+        Sid       = "AWSCloudTrailWrite"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.cloudtrail_logs.arn}/cloudtrail/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+            "aws:SourceArn" = "arn:${data.aws_partition.current.partition}:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/${var.project}-${var.env}-${var.session}-cloudtrail"
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [
+    aws_s3_bucket_public_access_block.cloudtrail_logs,
+    aws_s3_bucket_server_side_encryption_configuration.cloudtrail_logs,
+  ]
+}
+
 resource "aws_cloudtrail" "main" {
   name                          = "${var.project}-${var.env}-${var.session}-cloudtrail"
   s3_bucket_name                = aws_s3_bucket.cloudtrail_logs.id
@@ -186,20 +218,13 @@ resource "aws_cloudtrail" "main" {
   is_multi_region_trail         = false # Multi-region off to stay in budget
   include_global_service_events = true
 
+  # Avoid empty data_resource blocks that some accounts reject
   event_selector {
     read_write_type           = "All"
     include_management_events = true
-
-    data_resource {
-      type   = "AWS::Lambda::Function"
-      values = []
-    }
-
-    data_resource {
-      type   = "AWS::S3::Object"
-      values = []
-    }
   }
+
+  depends_on = [aws_s3_bucket_policy.cloudtrail_logs]
 
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-cloudtrail"
@@ -210,28 +235,10 @@ resource "aws_cloudtrail" "main" {
 # AWS Config - Recorder and Rules
 # =============================================================================
 
-resource "aws_config_configuration_recorder" "main" {
-  name     = "${var.project}-${var.env}-${var.session}-config-recorder"
-  role_arn = aws_iam_role.config_recorder.arn
-}
-
-resource "aws_config_configuration_recorder_status" "main" {
-  name       = aws_config_configuration_recorder.main.name
-  is_enabled = true
-
-  depends_on = [aws_config_configuration_recorder.main]
-}
-
-resource "aws_config_delivery_channel" "main" {
-  name           = "${var.project}-${var.env}-${var.session}-config-delivery-channel"
-  s3_bucket_name = aws_s3_bucket.config_delivery.id
-  s3_key_prefix  = "config-delivery"
-
-  depends_on = [aws_config_configuration_recorder.main]
-}
-
-# S3 bucket for Config delivery
+# S3 bucket for Config delivery (must exist before delivery channel)
 resource "aws_s3_bucket" "config_delivery" {
+  count = var.create_config_recorder ? 1 : 0
+
   bucket        = "${var.project}-${var.env}-${var.session}-config-delivery"
   force_destroy = true
 
@@ -242,7 +249,9 @@ resource "aws_s3_bucket" "config_delivery" {
 }
 
 resource "aws_s3_bucket_public_access_block" "config_delivery" {
-  bucket = aws_s3_bucket.config_delivery.id
+  count = var.create_config_recorder ? 1 : 0
+
+  bucket = aws_s3_bucket.config_delivery[0].id
 
   block_public_acls       = true
   block_public_policy     = true
@@ -251,7 +260,9 @@ resource "aws_s3_bucket_public_access_block" "config_delivery" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "config_delivery" {
-  bucket = aws_s3_bucket.config_delivery.id
+  count = var.create_config_recorder ? 1 : 0
+
+  bucket = aws_s3_bucket.config_delivery[0].id
 
   rule {
     apply_server_side_encryption_by_default {
@@ -260,8 +271,64 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "config_delivery" 
   }
 }
 
+resource "aws_s3_bucket_policy" "config_delivery" {
+  count = var.create_config_recorder ? 1 : 0
+
+  bucket = aws_s3_bucket.config_delivery[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AWSConfigBucketPermissionsCheck"
+        Effect    = "Allow"
+        Principal = { Service = "config.amazonaws.com" }
+        Action    = "s3:GetBucketAcl"
+        Resource  = aws_s3_bucket.config_delivery[0].arn
+        Condition = {
+          StringEquals = {
+            "AWS:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        Sid       = "AWSConfigBucketExistenceCheck"
+        Effect    = "Allow"
+        Principal = { Service = "config.amazonaws.com" }
+        Action    = "s3:ListBucket"
+        Resource  = aws_s3_bucket.config_delivery[0].arn
+        Condition = {
+          StringEquals = {
+            "AWS:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      },
+      {
+        Sid       = "AWSConfigBucketDelivery"
+        Effect    = "Allow"
+        Principal = { Service = "config.amazonaws.com" }
+        Action    = "s3:PutObject"
+        Resource  = "${aws_s3_bucket.config_delivery[0].arn}/config-delivery/AWSLogs/${data.aws_caller_identity.current.account_id}/Config/*"
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl"      = "bucket-owner-full-control"
+            "AWS:SourceAccount" = data.aws_caller_identity.current.account_id
+          }
+        }
+      }
+    ]
+  })
+
+  depends_on = [
+    aws_s3_bucket_public_access_block.config_delivery,
+    aws_s3_bucket_server_side_encryption_configuration.config_delivery,
+  ]
+}
+
 # IAM Role for Config Recorder
 resource "aws_iam_role" "config_recorder" {
+  count = var.create_config_recorder ? 1 : 0
+
   name = "${var.project}-${var.env}-${var.session}-config-role"
 
   assume_role_policy = jsonencode({
@@ -282,15 +349,83 @@ resource "aws_iam_role" "config_recorder" {
   }
 }
 
+# AWSConfigRole is deprecated/removed; use AWS_ConfigRole
 resource "aws_iam_role_policy_attachment" "config_recorder" {
-  role       = aws_iam_role.config_recorder.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSConfigRole"
+  count = var.create_config_recorder ? 1 : 0
+
+  role       = aws_iam_role.config_recorder[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
+}
+
+# Inline policy so Config can write to the delivery bucket even if managed policy is thin
+resource "aws_iam_role_policy" "config_recorder_s3" {
+  count = var.create_config_recorder ? 1 : 0
+
+  name = "${var.project}-${var.env}-${var.session}-config-s3"
+  role = aws_iam_role.config_recorder[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetBucketAcl",
+          "s3:ListBucket"
+        ]
+        Resource = aws_s3_bucket.config_delivery[0].arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "${aws_s3_bucket.config_delivery[0].arn}/*"
+      }
+    ]
+  })
+}
+
+resource "aws_config_configuration_recorder" "main" {
+  count = var.create_config_recorder ? 1 : 0
+
+  name     = "${var.project}-${var.env}-${var.session}-config-recorder"
+  role_arn = aws_iam_role.config_recorder[0].arn
+
+  recording_group {
+    all_supported                 = true
+    include_global_resource_types = true
+  }
+
+  depends_on = [aws_iam_role_policy_attachment.config_recorder[0]]
+}
+
+resource "aws_config_delivery_channel" "main" {
+  count = var.create_config_recorder ? 1 : 0
+
+  name           = "${var.project}-${var.env}-${var.session}-config-delivery-channel"
+  s3_bucket_name = aws_s3_bucket.config_delivery[0].id
+  s3_key_prefix  = "config-delivery"
+
+  depends_on = [
+    aws_config_configuration_recorder.main[0],
+    aws_s3_bucket_policy.config_delivery[0],
+  ]
+}
+
+resource "aws_config_configuration_recorder_status" "main" {
+  count = var.create_config_recorder ? 1 : 0
+
+  name       = aws_config_configuration_recorder.main[0].name
+  is_enabled = true
+
+  depends_on = [aws_config_delivery_channel.main[0]]
 }
 
 # AWS Config Rules
 
 # Rule: encrypted-volumes
 resource "aws_config_config_rule" "encrypted_volumes" {
+  count = var.create_config_recorder ? 1 : 0
+
   name = "encrypted-volumes"
 
   source {
@@ -298,11 +433,13 @@ resource "aws_config_config_rule" "encrypted_volumes" {
     source_identifier = "ENCRYPTED_VOLUMES"
   }
 
-  depends_on = [aws_config_configuration_recorder.main]
+  depends_on = [aws_config_configuration_recorder_status.main]
 }
 
 # Rule: s3-bucket-public-read-prohibited
 resource "aws_config_config_rule" "s3_bucket_public_read_prohibited" {
+  count = var.create_config_recorder ? 1 : 0
+
   name = "s3-bucket-public-read-prohibited"
 
   source {
@@ -310,11 +447,13 @@ resource "aws_config_config_rule" "s3_bucket_public_read_prohibited" {
     source_identifier = "S3_BUCKET_PUBLIC_READ_PROHIBITED"
   }
 
-  depends_on = [aws_config_configuration_recorder.main]
+  depends_on = [aws_config_configuration_recorder_status.main]
 }
 
 # Rule: required-tags
 resource "aws_config_config_rule" "required_tags" {
+  count = var.create_config_recorder ? 1 : 0
+
   name = "required-tags"
 
   source {
@@ -328,11 +467,13 @@ resource "aws_config_config_rule" "required_tags" {
     tag3Key = "Session"
   })
 
-  depends_on = [aws_config_configuration_recorder.main]
+  depends_on = [aws_config_configuration_recorder_status.main]
 }
 
 # Rule: iam-policy-no-statements-with-admin-access
 resource "aws_config_config_rule" "iam_policy_no_statements_with_admin_access" {
+  count = var.create_config_recorder ? 1 : 0
+
   name = "iam-policy-no-statements-with-admin-access"
 
   source {
@@ -340,19 +481,21 @@ resource "aws_config_config_rule" "iam_policy_no_statements_with_admin_access" {
     source_identifier = "IAM_POLICY_NO_STATEMENTS_WITH_ADMIN_ACCESS"
   }
 
-  depends_on = [aws_config_configuration_recorder.main]
+  depends_on = [aws_config_configuration_recorder_status.main]
 }
 
 # Rule: cloudtrail-enabled
 resource "aws_config_config_rule" "cloudtrail_enabled" {
+  count = var.create_config_recorder ? 1 : 0
+
   name = "cloudtrail-enabled"
 
   source {
     owner             = "AWS"
-    source_identifier = "CLOUDTRAIL_ENABLED"
+    source_identifier = "CLOUD_TRAIL_ENABLED"
   }
 
-  depends_on = [aws_config_configuration_recorder.main]
+  depends_on = [aws_config_configuration_recorder_status.main]
 }
 
 # =============================================================================
@@ -360,6 +503,8 @@ resource "aws_config_config_rule" "cloudtrail_enabled" {
 # =============================================================================
 
 resource "aws_guardduty_detector" "main" {
+  count = var.create_guardduty ? 1 : 0
+
   enable = true
 
   tags = {
@@ -371,19 +516,15 @@ resource "aws_guardduty_detector" "main" {
 # Security Hub - This account only
 # =============================================================================
 
+# Enable Security Hub in this account only (sandbox has no Organizations admin rights)
 resource "aws_securityhub_account" "main" {
-  depends_on = [aws_guardduty_detector.main]
+  count = var.create_security_hub ? 1 : 0
+
+  enable_default_standards  = true
+  control_finding_generator = "SECURITY_CONTROL"
+
+  depends_on = [aws_guardduty_detector.main[0]]
 }
-
-# Auto-enable security standards
-resource "aws_securityhub_organization_admin_account" "admin" {
-  admin_account_id = data.aws_caller_identity.current.account_id
-
-  depends_on = [aws_securityhub_account.main]
-}
-
-# Note: Security Hub standards are auto-enabled when enabled at the organization level
-# For standalone accounts, standards are enabled via the console or API
 
 # =============================================================================
 # Outputs
@@ -413,20 +554,20 @@ output "cloudtrail_logs_bucket_name" {
 
 output "config_recorder_name" {
   description = "Name of the Config recorder"
-  value       = aws_config_configuration_recorder.main.name
+  value       = var.create_config_recorder ? aws_config_configuration_recorder.main[0].name : null
 }
 
 output "config_delivery_bucket_name" {
   description = "Name of the Config delivery S3 bucket"
-  value       = aws_s3_bucket.config_delivery.id
+  value       = var.create_config_recorder ? aws_s3_bucket.config_delivery[0].id : null
 }
 
 output "guardduty_detector_id" {
   description = "ID of the GuardDuty detector"
-  value       = aws_guardduty_detector.main.id
+  value       = var.create_guardduty ? aws_guardduty_detector.main[0].id : null
 }
 
 output "security_hub_enabled" {
   description = "Whether Security Hub is enabled"
-  value       = aws_securityhub_account.main.id
+  value       = var.create_security_hub ? aws_securityhub_account.main[0].id : null
 }

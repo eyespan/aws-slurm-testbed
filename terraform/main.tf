@@ -24,12 +24,20 @@ provider "aws" {
   }
 }
 
+
+
+
 # =============================================================================
 # Bootstrap Security Module
 # =============================================================================
 
 module "bootstrap" {
   source = "./bootstrap"
+
+  # Account-scoped services (max 1): skip if already enabled from prior sessions
+  create_config_recorder = false
+  create_guardduty       = false
+  create_security_hub    = false
 
   aws_region          = var.aws_region
   project             = var.project
@@ -97,11 +105,16 @@ module "controller" {
   slurm_version            = var.slurm_version
   ami_id                   = data.aws_ssm_parameter.ami_current.value
   ssh_private_key_path     = var.ssh_private_key_path
+  enable_mariadb           = var.enable_mariadb
+  mariadb_password         = var.mariadb_password
+  controller_instance_type = try(var.controller_instance_type, "t3.medium")
 }
 
-# Data source to get current AMI from SSM parameter
+# Current compute AMI. Prefer Image Builder-managed parameter; fall back is created below if missing.
+# For first-time deploys set TF_VAR_initial_ami_id or ensure /hpc-testbed/ami/compute/current exists.
 data "aws_ssm_parameter" "ami_current" {
-  name = module.image_builder.ami_ssm_parameter_current
+  name       = module.image_builder.ami_ssm_parameter_current
+  depends_on = [module.image_builder]
 }
 
 # =============================================================================
@@ -131,7 +144,9 @@ module "login" {
   project                  = var.project
   env                      = var.env
   session                  = var.session
+  aws_region               = var.aws_region
   vpc_id                   = module.network.vpc_id
+  vpc_cidr                 = module.network.vpc_cidr
   public_subnet_ids        = module.network.public_subnet_ids
   private_subnet_ids       = module.network.private_subnet_ids
   security_group_ids       = module.network.security_group_ids
@@ -145,8 +160,8 @@ module "login" {
   controller_iam_role_arn  = module.controller.iam_role_arn
   slurm_version            = var.slurm_version
   enable_mariadb           = var.enable_mariadb
-  mariadb_endpoint         = var.enable_mariadb ? module.controller.mariadb_endpoint : ""
-  mariadb_port             = var.enable_mariadb ? module.controller.mariadb_port : ""
+  mariadb_endpoint         = var.enable_mariadb ? coalesce(module.controller.mariadb_endpoint, "") : ""
+  mariadb_port             = var.enable_mariadb ? tostring(coalesce(module.controller.mariadb_port, 3306)) : "3306"
   mariadb_db_name          = var.mariadb_db_name
   mariadb_username         = var.mariadb_username
   ssh_key_name             = var.ssh_key_name
@@ -155,6 +170,11 @@ module "login" {
   ebs_volume_type          = var.ebs_volume_type
   ebs_volume_iops          = var.ebs_volume_iops
   ebs_volume_throughput    = var.ebs_volume_throughput
+  create_login_node        = var.create_login_node
+  create_debug_node        = var.create_debug_node
+  login_instance_type      = var.login_instance_type
+  debug_instance_type      = var.debug_instance_type
+  users_yaml_content       = file("${path.module}/../config/users/users.yaml")
 }
 
 # =============================================================================
@@ -168,13 +188,15 @@ module "image_builder" {
   project             = var.project
   env                 = var.env
   session             = var.session
-  build_instance_type = var.build_instance_type
-  subnet_id           = module.network.private_subnet_ids[0]
-  security_group_id   = module.network.security_group_ids["compute"]
-  log_bucket_name     = module.bootstrap.cloudtrail_logs_bucket_name
-  key_deletion_window = var.key_deletion_window
-  initial_ami_id      = var.initial_ami_id
-  termination_date    = var.image_termination_date
+  build_instance_type    = var.build_instance_type
+  subnet_id              = module.network.private_subnet_ids[0]
+  security_group_id      = module.network.security_group_ids["compute"]
+  log_bucket_name        = module.bootstrap.cloudtrail_logs_bucket_name
+  log_bucket_kms_key_arn = module.bootstrap.kms_key_arns["s3"]
+  key_deletion_window    = var.key_deletion_window
+  initial_ami_id         = var.initial_ami_id
+  termination_date       = var.image_termination_date
+  build_ami_on_apply     = var.build_ami_on_apply
 }
 
 # =============================================================================
@@ -382,13 +404,13 @@ output "controller_instance_private_dns" {
 }
 
 output "debug_instance_id" {
-  description = "ID of the debug node instance"
-  value       = module.controller.debug_instance_id
+  description = "ID of the debug node instance (login module)"
+  value       = module.login.debug_node_instance_id
 }
 
 output "debug_instance_private_ip" {
-  description = "Private IP of the debug node"
-  value       = module.controller.debug_instance_private_ip
+  description = "Private IP of the debug node (login module)"
+  value       = module.login.debug_node_instance_private_ip
 }
 
 output "munge_key_secret_arn" {
@@ -444,3 +466,99 @@ output "debug_node_security_group_id" {
   description = "ID of the debug node security group"
   value       = module.login.debug_node_security_group_id
 }
+
+# =============================================================================
+# Monitoring, observability, portal, patch, identity, FIS (Tasks 19-30)
+# =============================================================================
+
+module "monitoring" {
+  source = "./monitoring"
+
+  project                  = var.project
+  env                      = var.env
+  session                  = var.session
+  aws_region               = var.aws_region
+  vpc_id                   = module.network.vpc_id
+  private_subnet_ids       = module.network.private_subnet_ids
+  security_group_ids       = module.network.security_group_ids
+  kms_key_arns             = module.bootstrap.kms_key_arns
+  ami_id                   = data.aws_ssm_parameter.ami_current.value
+  ssh_key_name             = var.ssh_key_name
+  controller_private_ip    = module.controller.controller_instance_private_ip
+  private_hosted_zone_id   = module.network.private_hosted_zone_id
+  private_hosted_zone_name = module.network.private_hosted_zone_name
+  create_monitoring        = var.create_monitoring
+}
+
+module "observability" {
+  source = "./observability"
+
+  project            = var.project
+  env                = var.env
+  session            = var.session
+  aws_region         = var.aws_region
+  create_alarms      = var.create_alarms
+  alarm_email        = var.alarm_email
+  efs_file_system_id = module.storage.file_system_id
+}
+
+module "portal" {
+  source = "./portal"
+
+  project            = var.project
+  env                = var.env
+  session            = var.session
+  vpc_id             = module.network.vpc_id
+  public_subnet_ids  = module.network.public_subnet_ids
+  login_instance_id  = coalesce(module.login.login_node_instance_id, "")
+  login_private_ip   = coalesce(module.login.login_node_instance_private_ip, "")
+  create_portal      = var.create_portal
+  attach_login       = var.create_login_node
+}
+
+module "patch" {
+  source = "./patch"
+
+  project      = var.project
+  env          = var.env
+  session      = var.session
+  create_patch = var.create_patch
+}
+
+module "identity" {
+  source = "./identity"
+
+  project            = var.project
+  env                = var.env
+  session            = var.session
+  vpc_id             = module.network.vpc_id
+  private_subnet_ids = module.network.private_subnet_ids
+  enable_directory   = var.enable_directory
+}
+
+module "fis" {
+  source = "./fis"
+
+  project    = var.project
+  env        = var.env
+  session    = var.session
+  create_fis = var.create_fis
+  subnet_ids = module.network.private_subnet_ids
+}
+
+output "monitoring_private_ip" {
+  value = module.monitoring.monitoring_private_ip
+}
+output "grafana_url" {
+  value = module.monitoring.grafana_url
+}
+output "portal_url" {
+  value = module.portal.portal_url
+}
+output "sns_alarms_topic_arn" {
+  value = module.observability.sns_topic_arn
+}
+output "fis_node_stop_template_id" {
+  value = module.fis.node_stop_template_id
+}
+

@@ -1,97 +1,261 @@
-version: 1.0
 name: slurm-build
-description: |
-  Build and install Slurm from source.
-  Uses pinned slurm_version variable.
+description: Build and install SchedMD Slurm into /opt/slurm with MySQL accounting (slurmdbd)
+schemaVersion: 1.0
 
 parameters:
-  - slurm_version:
-      description: "Slurm version to build (e.g., 23.11.7)"
-      default: "23.11.7"
+  - SlurmVersion:
+      type: string
+      default: "23.02.7"
+      description: SchedMD Slurm release to compile
 
-steps:
-  - name: InstallBuildDependencies
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Install build dependencies
-          yum install -y gcc make rpm-build
-          yum install -y autotrace libtool autoconf automake
-          yum install -y munge munge-libs
-          yum install -y perl-ExtUtils-MakeMaker
-          yum install -y openssl-devel pam-devel
-          yum install -y libxml2-devel readline-devel
-          yum install -y ncurses-devel zlib-devel
-          yum install -y hwloc-devel lua-devel
-          yum install -y rrdtool-devel
-          yum install -y json-c-devel
-          yum install -y sqlite-devel
-          yum install -y perl-Switch
+phases:
+  - name: build
+    steps:
+      - name: InstallBuildDeps
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              set -euxo pipefail
+              PKG=$(command -v dnf >/dev/null 2>&1 && echo dnf || echo yum)
+              # AL2023: never install full curl (conflicts with curl-minimal)
+              $PKG install -y --setopt=install_weak_deps=False \
+                gcc gcc-c++ make automake autoconf libtool \
+                openssl-devel pam-devel numactl-devel hwloc-devel hwloc hwloc-libs \
+                python3 python3-pip wget bzip2 tar nfs-utils jq
+              $PKG install -y munge munge-libs munge-devel amazon-efs-utils 2>/dev/null || true
+              # REQUIRED for accounting_storage/mysql + slurmdbd (fail build if missing)
+              $PKG install -y mariadb105 mariadb105-devel \
+                || $PKG install -y mariadb1011 mariadb1011-devel
+              # Connector libs — configure's MySQL link test needs these on AL2023
+              $PKG install -y mariadb-connector-c mariadb-connector-c-devel 2>/dev/null \
+                || $PKG install -y mariadb-connector-c 2>/dev/null || true
+              command -v gcc
+              command -v make
+              command -v mysql_config
+              mysql_config --version
+              mysql_config --cflags
+              mysql_config --libs
+              ls /usr/include/mysql/mysql.h /usr/include/mysql/mariadb_version.h 2>/dev/null \
+                || ls /usr/include/mariadb/mysql.h 2>/dev/null \
+                || { echo "FATAL: mysql.h not found after mariadb*-devel install"; exit 1; }
+              id -u slurm >/dev/null 2>&1 || useradd -r -s /sbin/nologin slurm
+              id -u munge >/dev/null 2>&1 || useradd -r -s /sbin/nologin munge
+              mkdir -p /opt/slurm /etc/slurm /var/spool/slurmctld /var/spool/slurmd \
+                /var/log/slurm /etc/munge /var/log/munge /var/lib/munge /run/munge /var/run/slurm
+              chown -R slurm:slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm || true
+              chown -R munge:munge /etc/munge /var/log/munge /var/lib/munge /run/munge || true
+              echo "deps step done (mysql_config=$(command -v mysql_config))"
 
-  - name: DownloadSlurmSource
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Download Slurm source
-          SLURM_VERSION="${slurm_version}"
-          cd /tmp
-          curl -LO "https://download.schedmd.com/slurm/slurm-${SLURM_VERSION}.tar.bz2"
-          tar -xjf "slurm-${SLURM_VERSION}.tar.bz2"
-          cd "slurm-${SLURM_VERSION}"
+      - name: EnsureMunge
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              set -euxo pipefail
+              if command -v munged >/dev/null 2>&1; then
+                echo "munge already installed"
+                exit 0
+              fi
+              echo "Building munge from source..."
+              PKG=$(command -v dnf >/dev/null 2>&1 && echo dnf || echo yum)
+              $PKG install -y gcc make openssl-devel bzip2 tar wget xz 2>/dev/null || true
+              cd /tmp
+              MVER=0.5.15
+              wget -q "https://github.com/dun/munge/releases/download/munge-${MVER}/munge-${MVER}.tar.xz" \
+                || curl -fsSL -o "munge-${MVER}.tar.xz" \
+                     "https://github.com/dun/munge/releases/download/munge-${MVER}/munge-${MVER}.tar.xz"
+              tar -xf "munge-${MVER}.tar.xz"
+              cd "munge-${MVER}"
+              ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --runstatedir=/run
+              make -j2
+              make install
+              ldconfig || true
+              id -u munge >/dev/null 2>&1 || useradd -r -s /sbin/nologin munge
+              mkdir -p /etc/munge /var/log/munge /var/lib/munge /run/munge
+              chown -R munge:munge /etc/munge /var/log/munge /var/lib/munge /run/munge
+              cat >/usr/lib/systemd/system/munge.service <<'MEOF'
+              [Unit]
+              Description=MUNGE authentication service
+              After=network.target
+              [Service]
+              Type=forking
+              ExecStart=/usr/sbin/munged
+              User=munge
+              Group=munge
+              Restart=on-failure
+              [Install]
+              WantedBy=multi-user.target
+              MEOF
+              systemctl daemon-reload || true
+              systemctl enable munge 2>/dev/null || true
+              echo "munge installed from source"
 
-  - name: ConfigureAndBuildSlurm
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Configure and build Slurm
-          cd /tmp/slurm-${slurm_version}
-          ./configure \
-            --prefix=/usr \
-            --sysconfdir=/etc/slurm \
-            --localstatedir=/var \
-            --enable slurmd \
-            --enable slurmctld \
-            --enable slurmdbd \
-            --enable scontrol \
-            --enable slurmrestd \
-            --with-pam=/lib64/security \
-            --with-json=/usr \
-            --with-libxml2=/usr
-          make -j$(nproc)
-          make install
+      - name: BuildSlurm
+        action: ExecuteBash
+        inputs:
+          commands:
+            - |
+              set -euxo pipefail
+              SLURM_VERSION="{{ SlurmVersion }}"
+              MYSQLCFG=$(command -v mysql_config)
+              test -x "$MYSQLCFG"
+              # CRITICAL: Slurm's --with-mysql_config wants the *directory* that contains
+              # mysql_config (AC_PATH_PROGS search path), NOT the binary path itself.
+              # Passing /usr/bin/mysql_config makes configure report "mysql_config not found".
+              MYSQLCFG_DIR=$(dirname "$MYSQLCFG")
+              echo "Building Slurm ${SLURM_VERSION} with MySQL (bin=$MYSQLCFG dir=$MYSQLCFG_DIR)"
+              echo "mysql_config --version: $($MYSQLCFG --version)"
+              echo "mysql_config --cflags:  $($MYSQLCFG --cflags 2>/dev/null || true)"
+              echo "mysql_config --include: $($MYSQLCFG --include 2>/dev/null || true)"
+              echo "mysql_config --libs:    $($MYSQLCFG --libs 2>/dev/null || true)"
+              echo "mysql_config --libs_r:  $($MYSQLCFG --libs_r 2>/dev/null || true)"
+              # Slurm uses --include and --libs_r internally; ensure libs_r works or alias
+              if ! $MYSQLCFG --libs_r >/dev/null 2>&1; then
+                echo "WARN: mysql_config --libs_r unsupported; wrapping via --libs"
+                # Some MariaDB builds only implement --libs
+              fi
 
-  - name: CreateSlurmDirectories
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Create required directories
-          mkdir -p /var/spool/slurm
-          mkdir -p /var/log/slurm
-          mkdir -p /etc/slurm
-          chown -R slurm:slurm /var/spool/slurm
-          chown -R slurm:slurm /var/log/slurm
+              # Always rebuild if plugin missing (do not keep a non-MySQL /opt/slurm)
+              if [ -x /opt/slurm/sbin/slurmctld ] && [ -x /opt/slurm/bin/sinfo ]; then
+                if [ -f /opt/slurm/lib/slurm/accounting_storage_mysql.so ] \
+                  || [ -f /opt/slurm/lib64/slurm/accounting_storage_mysql.so ]; then
+                  echo "Slurm already present WITH MySQL accounting plugin"
+                  /opt/slurm/sbin/slurmctld -V
+                  ls -la /opt/slurm/lib/slurm/accounting_storage_mysql.so \
+                         /opt/slurm/lib64/slurm/accounting_storage_mysql.so 2>/dev/null || true
+                  exit 0
+                fi
+                echo "Existing /opt/slurm lacks MySQL plugin — rebuilding"
+                rm -rf /opt/slurm
+                mkdir -p /opt/slurm
+              fi
 
-  - name: ConfigureSlurmEnv
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Configure environment for Slurm
-          echo 'export SLURM_HOME=/usr' >> /etc/profile.d/slurm.sh
-          echo 'export PATH=$PATH:/usr/bin:/usr/sbin' >> /etc/profile.d/slurm.sh
-          chmod +x /etc/profile.d/slurm.sh
+              cd /tmp
+              TARBALL="slurm-${SLURM_VERSION}.tar.bz2"
+              URL="https://download.schedmd.com/slurm/${TARBALL}"
+              echo "Downloading ${URL}"
+              wget -q "${URL}" || curl -fsSL -o "${TARBALL}" "${URL}"
+              rm -rf "slurm-${SLURM_VERSION}"
+              tar -xjf "${TARBALL}"
+              cd "slurm-${SLURM_VERSION}"
 
-  - name: Cleanup
-    action: ExecuteBash
-    inputs:
-      commands:
-        - |
-          # Cleanup source and build files
-          cd /tmp
-          rm -rf slurm-${slurm_version}*
-          yum clean all
-          rm -rf /var/cache/yum/*
+              # HARD REQUIRE MySQL — directory path for --with-mysql_config
+              ./configure --prefix=/opt/slurm --sysconfdir=/etc/slurm \
+                --with-munge=/usr \
+                --with-mysql_config="$MYSQLCFG_DIR" \
+                --disable-debug
+
+              # Prove configure actually enabled MySQL (config.log / config.h)
+              if ! grep -E 'HAVE_MYSQL|WITH_MYSQL|mysql' config.log 2>/dev/null | head -20; then
+                echo "WARN: config.log has little mysql evidence — dumping tail"
+                tail -80 config.log || true
+              fi
+              # Fail early if configure disabled mysql
+              if grep -q 'mysql_config not found\|no MySQL development libs' config.log 2>/dev/null; then
+                echo "FATAL: configure did not enable MySQL — see config.log"
+                grep -n -i mysql config.log | tail -40 || true
+                exit 1
+              fi
+
+              make -j"$(nproc 2>/dev/null || echo 2)"
+              make install
+
+              test -x /opt/slurm/sbin/slurmctld
+              test -x /opt/slurm/sbin/slurmd
+              test -x /opt/slurm/sbin/slurmdbd
+              test -x /opt/slurm/bin/sinfo
+              if [ ! -f /opt/slurm/lib/slurm/accounting_storage_mysql.so ] \
+                && [ ! -f /opt/slurm/lib64/slurm/accounting_storage_mysql.so ]; then
+                echo "FATAL: accounting_storage_mysql.so missing after make install"
+                find /opt/slurm -name '*mysql*' 2>/dev/null || true
+                ls -la /opt/slurm/lib/slurm/ 2>/dev/null | head -40 || true
+                ls -la /opt/slurm/lib64/slurm/ 2>/dev/null | head -40 || true
+                exit 1
+              fi
+
+              ls -la /opt/slurm/lib/slurm/accounting_storage_mysql.so \
+                     /opt/slurm/lib64/slurm/accounting_storage_mysql.so 2>/dev/null || true
+              ldd /opt/slurm/sbin/slurmdbd | grep -E 'mysql|mariadb' || true
+
+              # Python seff via sacct (SchedMD Perl seff needs Slurmdb.pm / perlapi)
+              cat > /opt/slurm/bin/seff <<'SEFFEOF'
+              #!/usr/bin/env python3
+              import sys, subprocess
+              if len(sys.argv) < 2:
+                  print("Usage: seff <jobid>", file=sys.stderr)
+                  sys.exit(1)
+              jid = sys.argv[1]
+              fmt = "JobID,JobName,State,Elapsed,TotalCPU,AllocCPUS,ReqMem,MaxRSS,AveRSS,NodeList"
+              out = subprocess.run(["sacct", "-j", jid, "-n", "-P", "--format=" + fmt], capture_output=True, text=True)
+              if out.returncode != 0 or not out.stdout.strip():
+                  print(out.stderr or "No accounting data", file=sys.stderr)
+                  sys.exit(1)
+              print("Job efficiency for %s:" % jid)
+              for line in out.stdout.strip().splitlines():
+                  print(" ", line.replace("|", "  "))
+              SEFFEOF
+              # Remove YAML-induced leading spaces from the script body
+              sed -i 's/^              //' /opt/slurm/bin/seff
+              chmod 755 /opt/slurm/bin/seff
+
+              cat >/etc/profile.d/slurm.sh <<'EOF'
+              export PATH=/opt/slurm/bin:/opt/slurm/sbin:$PATH
+              EOF
+              chmod 644 /etc/profile.d/slurm.sh
+
+              cat >/usr/lib/systemd/system/slurmctld.service <<'EOF'
+              [Unit]
+              Description=Slurm controller daemon
+              After=network-online.target munge.service
+              Wants=network-online.target
+              Requires=munge.service
+              [Service]
+              Type=simple
+              Environment=LD_LIBRARY_PATH=/opt/slurm/lib:/opt/slurm/lib64
+              ExecStart=/opt/slurm/sbin/slurmctld -D
+              Restart=on-failure
+              RestartSec=5
+              User=slurm
+              Group=slurm
+              [Install]
+              WantedBy=multi-user.target
+              EOF
+
+              cat >/usr/lib/systemd/system/slurmd.service <<'EOF'
+              [Unit]
+              Description=Slurm compute node daemon
+              After=network-online.target munge.service
+              Wants=network-online.target
+              Requires=munge.service
+              [Service]
+              Type=simple
+              Environment=LD_LIBRARY_PATH=/opt/slurm/lib:/opt/slurm/lib64
+              ExecStart=/opt/slurm/sbin/slurmd -D
+              Restart=on-failure
+              RestartSec=5
+              [Install]
+              WantedBy=multi-user.target
+              EOF
+
+              cat >/usr/lib/systemd/system/slurmdbd.service <<'EOF'
+              [Unit]
+              Description=Slurm DB daemon
+              After=network-online.target munge.service
+              Wants=network-online.target
+              Requires=munge.service
+              [Service]
+              Type=simple
+              Environment=LD_LIBRARY_PATH=/opt/slurm/lib:/opt/slurm/lib64
+              ExecStart=/opt/slurm/sbin/slurmdbd -D
+              Restart=on-failure
+              RestartSec=5
+              User=slurm
+              Group=slurm
+              [Install]
+              WantedBy=multi-user.target
+              EOF
+
+              systemctl daemon-reload || true
+              /opt/slurm/sbin/slurmctld -V
+              echo "Slurm ${SLURM_VERSION} installed under /opt/slurm WITH MySQL accounting"

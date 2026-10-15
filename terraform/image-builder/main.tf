@@ -15,17 +15,6 @@ terraform {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
-provider "aws" {
-  region = var.aws_region
-
-  default_tags {
-    tags = {
-      Project = var.project
-      Env     = var.env
-      Session = var.session
-    }
-  }
-}
 
 # =============================================================================
 # IAM Roles and Policies
@@ -42,7 +31,10 @@ resource "aws_iam_role" "image_builder" {
         Action = "sts:AssumeRole"
         Effect = "Allow"
         Principal = {
-          Service = "ec2-image-builder.amazonaws.com"
+          Service = [
+            "ec2.amazonaws.com",
+            "imagebuilder.amazonaws.com"
+          ]
         }
       }
     ]
@@ -56,9 +48,9 @@ resource "aws_iam_role" "image_builder" {
 # Attach managed policies for Image Builder
 resource "aws_iam_role_policy_attachment" "image_builder_managed" {
   for_each = toset([
-    "arn:aws:iam::aws:policy/ImageBuilderFullAccess",
+    "arn:aws:iam::aws:policy/EC2InstanceProfileForImageBuilder",
     "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
-    "arn:aws:iam::aws:policy/AmazonEC2ReadOnlyAccess",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
   ])
 
   role       = aws_iam_role.image_builder.name
@@ -126,6 +118,61 @@ resource "aws_iam_role_policy_attachment" "image_builder_logs" {
   policy_arn = aws_iam_policy.image_builder_logs.arn
 }
 
+# S3 log uploads to the CloudTrail/logs bucket (KMS-encrypted) require explicit
+# s3:PutObject + kms:GenerateDataKey. Without this, pipeline fails with:
+#   AccessDenied: ... is not authorized to perform: kms:GenerateDataKey
+resource "aws_iam_policy" "image_builder_s3_logs" {
+  name = "${var.project}-${var.env}-${var.session}-image-builder-s3-logs"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        {
+          Sid    = "S3LogBucket"
+          Effect = "Allow"
+          Action = [
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:AbortMultipartUpload",
+            "s3:ListBucket",
+            "s3:GetBucketLocation",
+            "s3:ListBucketMultipartUploads",
+            "s3:ListMultipartUploadParts"
+          ]
+          Resource = [
+            "arn:aws:s3:::${var.log_bucket_name}",
+            "arn:aws:s3:::${var.log_bucket_name}/*"
+          ]
+        }
+      ],
+      length(var.log_bucket_kms_key_arn) > 0 ? [
+        {
+          Sid    = "KmsForEncryptedLogBucket"
+          Effect = "Allow"
+          Action = [
+            "kms:Encrypt",
+            "kms:Decrypt",
+            "kms:ReEncrypt*",
+            "kms:GenerateDataKey*",
+            "kms:DescribeKey"
+          ]
+          Resource = [var.log_bucket_kms_key_arn]
+        }
+      ] : []
+    )
+  })
+
+  tags = {
+    Name = "${var.project}-${var.env}-${var.session}-image-builder-s3-logs"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "image_builder_s3_logs" {
+  role       = aws_iam_role.image_builder.name
+  policy_arn = aws_iam_policy.image_builder_s3_logs.arn
+}
+
 # =============================================================================
 # Image Builder Components (from inline YAML)
 # =============================================================================
@@ -143,6 +190,12 @@ resource "aws_imagebuilder_component" "al2023_hardening" {
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-al2023-hardening"
   }
+
+  # Version bumps replace the resource; create new version before deleting old
+  # so pipeline/recipe never reference a deleted component ARN.
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Slurm Build Component
@@ -151,12 +204,16 @@ resource "aws_imagebuilder_component" "slurm_build" {
   version = var.component_version
 
   platform    = "Linux"
-  description = "Build and install Slurm from source"
+  description = "Build and install Slurm from source (MySQL accounting required)"
 
   data = file("${path.module}/components/slurm_build.yaml")
 
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-slurm-build"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -173,6 +230,10 @@ resource "aws_imagebuilder_component" "munge" {
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-munge"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Node Exporter Component
@@ -187,6 +248,10 @@ resource "aws_imagebuilder_component" "node_exporter" {
 
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-node-exporter"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -203,6 +268,10 @@ resource "aws_imagebuilder_component" "cloudwatch_agent" {
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-cloudwatch-agent"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # =============================================================================
@@ -213,7 +282,8 @@ resource "aws_imagebuilder_image_recipe" "hpc_compute" {
   name         = "${var.project}-${var.env}-${var.session}-hpc-compute-recipe"
   version      = var.recipe_version
   description  = "HPC compute node image recipe with hardening and monitoring"
-  parent_image = "arn:aws:imagebuilder:${data.aws_region.current.name}:aws:image/amazon-linux-2023-x86-64-pinned-access/e9c3d2b7a5c3d4e5"
+  # AMI ID is a supported parent_image format
+  parent_image = data.aws_ssm_parameter.al2023.value
 
   component {
     component_arn = aws_imagebuilder_component.al2023_hardening.arn
@@ -237,6 +307,12 @@ resource "aws_imagebuilder_image_recipe" "hpc_compute" {
 
   tags = {
     Name = "${var.project}-${var.env}-${var.session}-hpc-compute-recipe"
+  }
+
+  # Recipe versions are immutable; create new version before deleting old so the
+  # pipeline can move off the old ARN first (avoids ResourceDependencyException).
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
@@ -276,21 +352,63 @@ resource "aws_iam_instance_profile" "image_builder" {
   }
 }
 
+
+# =============================================================================
+# Distribution configuration (required to produce a usable AMI in-account)
+# =============================================================================
+
+resource "aws_imagebuilder_distribution_configuration" "hpc_compute" {
+  name        = "${var.project}-${var.env}-${var.session}-hpc-compute-dist"
+  description = "Distribute HPC compute AMI to this account/region"
+
+  distribution {
+    region = data.aws_region.current.name
+
+    ami_distribution_configuration {
+      name = "${var.project}-hpc-{{ imagebuilder:buildDate }}"
+
+      ami_tags = {
+        Project = var.project
+        Env     = var.env
+        Session = var.session
+        Name    = "${var.project}-${var.env}-${var.session}-hpc-ami"
+        Role    = "hpc-compute"
+      }
+    }
+  }
+
+  tags = {
+    Name = "${var.project}-${var.env}-${var.session}-hpc-compute-dist"
+  }
+}
+
 # =============================================================================
 # Image Builder Image Pipeline
 # =============================================================================
 
 resource "aws_imagebuilder_image_pipeline" "hpc_compute_weekly" {
   name        = "${var.project}-${var.env}-${var.session}-hpc-compute-weekly"
-  description = "Weekly pipeline for building HPC compute images"
+  description = "HPC compute image pipeline (weekly schedule + on-demand via make ami-build)"
 
-  image_recipe_arn                 = aws_imagebuilder_image_recipe.hpc_compute.arn
-  infrastructure_configuration_arn = aws_imagebuilder_infrastructure_configuration.hpc_compute.arn
+  image_recipe_arn                   = aws_imagebuilder_image_recipe.hpc_compute.arn
+  infrastructure_configuration_arn   = aws_imagebuilder_infrastructure_configuration.hpc_compute.arn
+  distribution_configuration_arn     = aws_imagebuilder_distribution_configuration.hpc_compute.arn
 
-  # Schedule: weekly on Sunday at 02:00 UTC
+  # Required in accounts that already have an SSM inventory / State Manager
+  # association (Inspector, org policies, etc.). Default true makes Image Builder
+  # create a second inventory association → InventoryCollection fails and the
+  # whole build is marked FAILED even when components succeeded.
+  enhanced_image_metadata_enabled = false
+
+  # Weekly refresh only — does NOT run on terraform apply.
+  # First/usable AMI: run `make ami-build` (starts execution, waits, promotes to SSM).
   schedule {
     schedule_expression                = "cron(0 2 ? * SUN *)"
     pipeline_execution_start_condition = "EXPRESSION_MATCH_ONLY"
+  }
+
+  image_tests_configuration {
+    image_tests_enabled = false
   }
 
   status = "ENABLED"
@@ -300,14 +418,45 @@ resource "aws_imagebuilder_image_pipeline" "hpc_compute_weekly" {
   }
 }
 
+# Optional: build an AMI during terraform apply (blocks 45–90 min). Prefer `make ami-build`.
+resource "aws_imagebuilder_image" "hpc_compute_on_apply" {
+  count = var.build_ami_on_apply ? 1 : 0
+
+  distribution_configuration_arn   = aws_imagebuilder_distribution_configuration.hpc_compute.arn
+  image_recipe_arn                 = aws_imagebuilder_image_recipe.hpc_compute.arn
+  infrastructure_configuration_arn = aws_imagebuilder_infrastructure_configuration.hpc_compute.arn
+
+  enhanced_image_metadata_enabled = false
+
+  image_tests_configuration {
+    image_tests_enabled = false
+  }
+
+  timeouts {
+    create = "120m"
+  }
+
+  tags = {
+    Name = "${var.project}-${var.env}-${var.session}-hpc-compute-image"
+  }
+}
+
 # =============================================================================
 # SSM Parameters for AMI tracking
 # =============================================================================
 
+data "aws_ssm_parameter" "al2023" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+}
+
 resource "aws_ssm_parameter" "ami_current" {
   name  = "/hpc-testbed/ami/compute/current"
   type  = "String"
-  value = var.initial_ami_id
+  value = var.initial_ami_id != "" ? var.initial_ami_id : data.aws_ssm_parameter.al2023.value
+
+  lifecycle {
+    ignore_changes = [value]
+  }
 
   description = "Current HPC compute AMI ID"
 
@@ -319,7 +468,11 @@ resource "aws_ssm_parameter" "ami_current" {
 resource "aws_ssm_parameter" "ami_previous" {
   name  = "/hpc-testbed/ami/compute/previous"
   type  = "String"
-  value = ""
+  value = var.initial_ami_id != "" ? var.initial_ami_id : data.aws_ssm_parameter.al2023.value
+
+  lifecycle {
+    ignore_changes = [value]
+  }
 
   description = "Previous HPC compute AMI ID for rollback"
 
@@ -384,4 +537,14 @@ output "image_builder_role_arn" {
 output "kms_key_arn" {
   description = "ARN of the KMS key for AMI encryption"
   value       = aws_kms_key.ami_encryption.arn
+}
+
+output "distribution_configuration_arn" {
+  description = "ARN of the Image Builder distribution configuration"
+  value       = aws_imagebuilder_distribution_configuration.hpc_compute.arn
+}
+
+output "on_apply_image_arn" {
+  description = "ARN of the image built during apply (null if build_ami_on_apply is false)"
+  value       = try(aws_imagebuilder_image.hpc_compute_on_apply[0].arn, null)
 }

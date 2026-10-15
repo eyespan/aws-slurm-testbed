@@ -1,9 +1,5 @@
 # Controller module outputs
 
-# =============================================================================
-# Instance Outputs
-# =============================================================================
-
 output "controller_instance_id" {
   description = "ID of the controller instance"
   value       = aws_instance.controller.id
@@ -20,18 +16,14 @@ output "controller_instance_private_dns" {
 }
 
 output "debug_instance_id" {
-  description = "ID of the debug node instance"
-  value       = aws_instance.debug.id
+  description = "Deprecated - debug node lives in the login module"
+  value       = null
 }
 
 output "debug_instance_private_ip" {
-  description = "Private IP of the debug node"
-  value       = aws_instance.debug.private_ip
+  description = "Deprecated - debug node lives in the login module"
+  value       = null
 }
-
-# =============================================================================
-# IAM Outputs
-# =============================================================================
 
 output "munge_key_secret_arn" {
   description = "ARN of the munge key secret"
@@ -42,10 +34,6 @@ output "iam_role_arn" {
   description = "ARN of the controller IAM role"
   value       = aws_iam_role.controller.arn
 }
-
-# =============================================================================
-# MariaDB Outputs
-# =============================================================================
 
 output "mariadb_endpoint" {
   description = "Endpoint of the MariaDB instance"
@@ -58,13 +46,9 @@ output "mariadb_port" {
 }
 
 output "mariadb_db_name" {
-  description = "Database name for Slurm accounting"
+  description = "Database name for for Slurm accounting"
   value       = var.mariadb_db_name
 }
-
-# =============================================================================
-# Configuration Outputs
-# =============================================================================
 
 output "controller_configuration" {
   description = "Controller node configuration details"
@@ -72,8 +56,8 @@ output "controller_configuration" {
     instance_id               = aws_instance.controller.id
     instance_private_ip       = aws_instance.controller.private_ip
     instance_type             = var.controller_instance_type
-    debug_instance_id         = aws_instance.debug.id
-    debug_instance_private_ip = aws_instance.debug.private_ip
+    debug_instance_id         = null
+    debug_instance_private_ip = null
     munge_key_secret_arn      = aws_secretsmanager_secret.munge_key.arn
     slurm_version             = var.slurm_version
     slurm_state_dir           = var.slurm_state_dir

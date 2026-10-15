@@ -97,11 +97,7 @@ resource "aws_cloudwatch_metric_alarm" "efs_burst_credits" {
   dimensions = {
     FileSystemId = aws_efs_file_system.hpc[0].id
   }
-  alarm_actions = [
-    "arn:aws:automate:${data.aws_region.current.name}:ec2:notify"
-  ]
-
-  tags = {
+tags = {
     Name     = "${var.project}-${var.env}-${var.session}-efs-burst-credits"
     severity = "warning"
     sli      = "storage_health"
@@ -125,11 +121,7 @@ resource "aws_cloudwatch_metric_alarm" "efs_storage_utilization" {
   dimensions = {
     FileSystemId = aws_efs_file_system.hpc[0].id
   }
-  alarm_actions = [
-    "arn:aws:automate:${data.aws_region.current.name}:ec2:notify"
-  ]
-
-  tags = {
+tags = {
     Name     = "${var.project}-${var.env}-${var.session}-efs-storage-utilization"
     severity = "warning"
     sli      = "storage_health"
@@ -153,11 +145,7 @@ resource "aws_cloudwatch_metric_alarm" "efs_throughput" {
   dimensions = {
     FileSystemId = aws_efs_file_system.hpc[0].id
   }
-  alarm_actions = [
-    "arn:aws:automate:${data.aws_region.current.name}:ec2:notify"
-  ]
-
-  tags = {
+tags = {
     Name     = "${var.project}-${var.env}-${var.session}-efs-throughput"
     severity = "warning"
     sli      = "storage_health"

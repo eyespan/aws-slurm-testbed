@@ -28,21 +28,21 @@ variable "session" {
 }
 
 variable "component_version" {
-  description = "Version for Image Builder components"
+  description = "Version for Image Builder components (bump when component YAML changes)"
   type        = string
-  default     = "1.0.0"
+  default     = "1.0.6"
 }
 
 variable "recipe_version" {
-  description = "Version for Image Builder recipe"
+  description = "Version for Image Builder recipe (must bump when components change)"
   type        = string
-  default     = "1.0.0"
+  default     = "1.0.6"
 }
 
 variable "build_instance_type" {
-  description = "Instance type for Image Builder builds"
+  description = "Instance type for Image Builder builds (t3.medium recommended; Slurm compile needs RAM)"
   type        = string
-  default     = "t3.small"
+  default     = "t3.medium"
 
   validation {
     condition     = contains(["t2.micro", "t2.small", "t2.medium", "t3.micro", "t3.small", "t3.medium", "t3a.micro", "t3a.small", "t3a.medium", "t4g.micro", "t4g.small", "t4g.medium"], var.build_instance_type)
@@ -68,6 +68,12 @@ variable "log_bucket_name" {
   default     = ""
 }
 
+variable "log_bucket_kms_key_arn" {
+  description = "KMS key ARN encrypting the log bucket (SSE-KMS). Required for Image Builder PutObject."
+  type        = string
+  default     = ""
+}
+
 variable "key_deletion_window" {
   description = "Number of days for KMS key deletion waiting period"
   type        = number
@@ -89,4 +95,10 @@ variable "termination_date" {
   description = "Termination date for infrastructure configuration"
   type        = string
   default     = ""
+}
+
+variable "build_ami_on_apply" {
+  description = "If true, terraform apply builds an AMI via Image Builder (blocks 45–120 min). Prefer make ami-build for on-demand builds."
+  type        = bool
+  default     = false
 }

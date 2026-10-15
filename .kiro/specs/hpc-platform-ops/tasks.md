@@ -72,7 +72,7 @@ Run one task per Kiro prompt. After each task run the quality gates (`make lint 
   - Partition and node definitions for `debug` (static) and `std` (cloud).
   - _Requirements: 4.1, 4.3, 4.4, 11.1_
 
-- [ ] 11. Login node and static debug node **[LOCAL] [Q]**
+- [-] 11. Login node and static debug node **[LOCAL] [Q]**
   - Login node (t3.small) and static `debug` node (t3.micro) joined to the cluster, EFS mounted, user provisioning from a YAML file.
   - _Requirements: 4.2_
 
