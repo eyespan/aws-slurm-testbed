@@ -69,19 +69,30 @@ flowchart TB
 
 ## 2. Prerequisites
 
+Required deploy order (AMI before instances):
+
 ```bash
 # Offline / CI
 make lint test
 
-# Live session
+# Live session — phased
 make preflight
-make up                 # foundation (network, storage, image pipeline) — does NOT build AMI
-make ami-build          # Image Builder run + promote to SSM (45–90 min)
-make up                 # re-apply so controller / login / debug use HPC AMI
+make foundation         # Phase 1: VPC, subnets, SGs, EFS, Image Builder pipeline
+make ami-build          # Phase 2: run pipeline, wait, promote AMI to SSM (45–90 min)
+make instances          # Phase 3: controller + login + debug (needs AMI in SSM)
+make full               # Phase 4: monitoring, observability, portal, …
 ```
 
+Shortcuts:
+
+| Command | What it does |
+|---------|----------------|
+| `make up` | Runs foundation → ami-build → instances (not phase 4) |
+| `make full` | Remaining modules after instances |
+| `python3 scripts/deploy.py up --skip-ami` | Skip AMI step when a current AMI already exists |
+
 Image Builder pipeline is **scheduled only** (Sunday 02:00 UTC).  
-`terraform apply` does not execute it — use `make ami-build` (or `TF_VAR_build_ami_on_apply=true`).
+`terraform apply` does **not** execute it — use `make ami-build` (or `TF_VAR_build_ami_on_apply=true`) before relying on Slurm on the nodes.
 
 ---
 
@@ -270,9 +281,11 @@ Optional (not required for baseline E2E):
 
 ```bash
 make preflight
-make up
-make ami-build          # wait for promote
-make up                 # instances on HPC AMI
+make foundation         # Phase 1: network, storage, Image Builder pipeline
+make ami-build          # Phase 2: build + promote AMI to SSM (45–90 min)
+make instances          # Phase 3: controller + login + debug on HPC AMI
+make full               # Phase 4: monitoring, observability, portal, …
+
 # wait for controller bootstrap (15–25 min first boot if compiling to EFS)
 # SSM → login:
 tests/scheduler/test_smoke.sh
@@ -280,6 +293,14 @@ sacct
 # browser: portal ALB DNS, /grafana
 make evidence
 make down
+```
+
+Equivalent shorter path for phases 1–3 only:
+
+```bash
+make preflight
+make up                 # foundation → ami-build → instances
+make full               # phase 4
 ```
 
 Capture new screenshots under `tests/scheduler/` with the same naming pattern (or dated subfolder) and update this doc’s “Session reference” line.
