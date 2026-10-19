@@ -1,7 +1,7 @@
 # HPC Platform Operations Test Bed - Makefile
 # Common targets for development and deployment
 
-.PHONY: help preflight up down foundation instances plan apply drift test lint evidence clean validate ami-build
+.PHONY: help preflight up down foundation instances full plan apply drift test lint evidence clean validate ami-build
 
 help:
 	@echo "HPC Platform Operations Test Bed"
@@ -10,15 +10,18 @@ help:
 	@echo "  1) make foundation   # VPC, subnets, SGs, EFS, Image Builder pipeline"
 	@echo "  2) make ami-build    # run pipeline, wait, promote AMI to SSM"
 	@echo "  3) make instances    # controller + login + debug EC2"
+	@echo "  4) make full         # remaining modules (monitoring, portal, ...)"
 	@echo ""
 	@echo "  Or all-in-one:  make up   # runs 1 → 2 → 3"
 	@echo "  Skip AMI step:  python3 scripts/deploy.py up --skip-ami"
+	@echo "  Full remainder: make full   # after instances (or: make up then make full)"
 	@echo ""
 	@echo "Targets:"
 	@echo "  foundation  - Phase 1: bootstrap + network + storage + image_builder"
 	@echo "  ami-build   - Phase 2: start Image Builder, wait, promote to SSM"
 	@echo "  instances   - Phase 3: controller + login + debug (needs AMI)"
-	@echo "  up          - Ordered full deploy (foundation → ami-build → instances)"
+	@echo "  full        - Phase 4: remaining modules (monitoring, observability, portal, ...)"
+	@echo "  up          - Ordered deploy (foundation → ami-build → instances)"
 	@echo "  down        - Destroy infrastructure with evidence export"
 	@echo "  preflight   - Verify identity, region, and remaining capacity"
 	@echo "  plan        - Generate terraform plan"
@@ -77,7 +80,7 @@ bootstrap:
 	cd terraform/bootstrap && terraform init -input=false && terraform validate && terraform apply -auto-approve || true
 
 # =============================================================================
-# Deployment Targets (phased: foundation → AMI → instances)
+# Deployment Targets (phased: foundation → AMI → instances → full)
 # =============================================================================
 
 foundation:
@@ -87,6 +90,10 @@ foundation:
 instances:
 	@echo "Phase 3: instances (controller + login + debug)..."
 	python3 scripts/deploy.py instances
+
+full:
+	@echo "Phase 4: remaining modules (monitoring, observability, portal, ...)..."
+	python3 scripts/deploy.py full
 
 up:
 	@echo "Ordered deploy: foundation → ami-build → instances..."

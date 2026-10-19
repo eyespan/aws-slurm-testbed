@@ -485,9 +485,12 @@ module "monitoring" {
   ami_id                   = data.aws_ssm_parameter.ami_current.value
   ssh_key_name             = var.ssh_key_name
   controller_private_ip    = module.controller.controller_instance_private_ip
+  login_private_ip         = coalesce(module.login.login_node_instance_private_ip, "")
   private_hosted_zone_id   = module.network.private_hosted_zone_id
   private_hosted_zone_name = module.network.private_hosted_zone_name
   create_monitoring        = var.create_monitoring
+  # Slurm exporter is not deployed by default; enable when an exporter listens on controller
+  slurm_exporter_enabled   = false
 }
 
 module "observability" {
@@ -505,15 +508,18 @@ module "observability" {
 module "portal" {
   source = "./portal"
 
-  project            = var.project
-  env                = var.env
-  session            = var.session
-  vpc_id             = module.network.vpc_id
-  public_subnet_ids  = module.network.public_subnet_ids
-  login_instance_id  = coalesce(module.login.login_node_instance_id, "")
-  login_private_ip   = coalesce(module.login.login_node_instance_private_ip, "")
-  create_portal      = var.create_portal
-  attach_login       = var.create_login_node
+  project                       = var.project
+  env                           = var.env
+  session                       = var.session
+  vpc_id                        = module.network.vpc_id
+  public_subnet_ids             = module.network.public_subnet_ids
+  login_instance_id             = coalesce(module.login.login_node_instance_id, "")
+  login_private_ip              = coalesce(module.login.login_node_instance_private_ip, "")
+  create_portal                 = var.create_portal
+  attach_login                  = var.create_login_node
+  monitoring_instance_id        = coalesce(module.monitoring.monitoring_instance_id, "")
+  monitoring_security_group_id  = coalesce(module.monitoring.monitoring_security_group_id, "")
+  attach_monitoring             = var.create_monitoring
 }
 
 module "patch" {
@@ -554,6 +560,12 @@ output "grafana_url" {
 }
 output "portal_url" {
   value = module.portal.portal_url
+}
+output "grafana_alb_url" {
+  value = module.portal.grafana_alb_url
+}
+output "prometheus_alb_url" {
+  value = module.portal.prometheus_alb_url
 }
 output "sns_alarms_topic_arn" {
   value = module.observability.sns_topic_arn

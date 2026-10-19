@@ -1,4 +1,4 @@
-# Status portal ALB in front of login-node service (Task 22)
+# Status portal ALB in front of login-node service + monitoring (Grafana/Prometheus) (Task 22)
 
 terraform {
   required_version = ">= 1.0"
@@ -33,6 +33,21 @@ variable "attach_login" {
   default     = true
 }
 
+# Monitoring integration
+variable "monitoring_instance_id" {
+  type    = string
+  default = ""
+}
+variable "monitoring_security_group_id" {
+  type    = string
+  default = ""
+}
+variable "attach_monitoring" {
+  description = "Attach monitoring instance to Grafana/Prometheus target groups"
+  type        = bool
+  default     = true
+}
+
 locals {
   tags = {
     Project = var.project
@@ -44,7 +59,7 @@ locals {
 resource "aws_security_group" "alb" {
   count       = var.create_portal ? 1 : 0
   name        = "${var.project}-${var.env}-${var.session}-portal-alb-sg"
-  description = "ALB for status portal"
+  description = "ALB for status portal and monitoring UIs"
   vpc_id      = var.vpc_id
 
   ingress {
@@ -52,6 +67,7 @@ resource "aws_security_group" "alb" {
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    description = "HTTP"
   }
   egress {
     from_port   = 0
@@ -60,6 +76,31 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   tags = merge(local.tags, { Name = "${var.project}-portal-alb-sg" })
+}
+
+# Allow ALB → monitoring Grafana (3000) and Prometheus (9090)
+resource "aws_security_group_rule" "monitoring_grafana_from_alb" {
+  #count                    = var.create_portal && var.monitoring_security_group_id != "" ? 1 : 0
+  count = var.create_portal ? 1 : 0
+  type                     = "ingress"
+  from_port                = 3000
+  to_port                  = 3000
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.alb[0].id
+  security_group_id        = var.monitoring_security_group_id
+  description              = "Grafana from portal ALB"
+}
+
+resource "aws_security_group_rule" "monitoring_prometheus_from_alb" {
+  #count                    = var.create_portal && var.monitoring_security_group_id != "" ? 1 : 0
+  count = var.create_portal ? 1 : 0
+  type                     = "ingress"
+  from_port                = 9090
+  to_port                  = 9090
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.alb[0].id
+  security_group_id        = var.monitoring_security_group_id
+  description              = "Prometheus from portal ALB"
 }
 
 resource "aws_lb" "portal" {
@@ -72,6 +113,9 @@ resource "aws_lb" "portal" {
   tags               = merge(local.tags, { Name = "${var.project}-portal-alb" })
 }
 
+# ---------------------------------------------------------------------------
+# Target groups
+# ---------------------------------------------------------------------------
 resource "aws_lb_target_group" "portal" {
   count       = var.create_portal ? 1 : 0
   name        = "${var.project}-${var.session}-portal-tg"
@@ -89,13 +133,68 @@ resource "aws_lb_target_group" "portal" {
   tags = local.tags
 }
 
+resource "aws_lb_target_group" "grafana" {
+  count       = var.create_portal ? 1 : 0
+  name        = "${var.project}-${var.session}-grafana-tg"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  health_check {
+    # Grafana runs with GF_SERVER_SERVE_FROM_SUB_PATH=true
+    path                = "/grafana/api/health"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 30
+    matcher             = "200"
+  }
+  tags = merge(local.tags, { Service = "grafana" })
+}
+
+resource "aws_lb_target_group" "prometheus" {
+  count       = var.create_portal ? 1 : 0
+  name        = "${var.project}-${var.session}-prom-tg"
+  port        = 9090
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  health_check {
+    # Prometheus is started with --web.route-prefix=/prometheus
+    path                = "/prometheus/-/healthy"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    interval            = 30
+    matcher             = "200"
+  }
+  tags = merge(local.tags, { Service = "prometheus" })
+}
+
 resource "aws_lb_target_group_attachment" "login" {
-  count            = var.create_portal && var.attach_login ? 1 : 0
+  count            = var.create_portal && var.attach_login && var.login_instance_id != "" ? 1 : 0
   target_group_arn = aws_lb_target_group.portal[0].arn
   target_id        = var.login_instance_id
   port             = 8080
 }
 
+resource "aws_lb_target_group_attachment" "grafana" {
+  #count            = var.create_portal && var.attach_monitoring && var.monitoring_instance_id != "" ? 1 : 0
+  count = var.create_portal && var.attach_monitoring ? 1 : 0
+  target_group_arn = aws_lb_target_group.grafana[0].arn
+  target_id        = var.monitoring_instance_id
+  port             = 3000
+}
+
+resource "aws_lb_target_group_attachment" "prometheus" {
+  #count            = var.create_portal && var.attach_monitoring && var.monitoring_instance_id != "" ? 1 : 0
+  count = var.create_portal && var.attach_monitoring ? 1 : 0
+  target_group_arn = aws_lb_target_group.prometheus[0].arn
+  target_id        = var.monitoring_instance_id
+  port             = 9090
+}
+
+# ---------------------------------------------------------------------------
+# Listener + path-based rules
+# ---------------------------------------------------------------------------
 resource "aws_lb_listener" "http" {
   count             = var.create_portal ? 1 : 0
   load_balancer_arn = aws_lb.portal[0].arn
@@ -107,9 +206,59 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+# Higher priority = evaluated first
+resource "aws_lb_listener_rule" "grafana" {
+  count        = var.create_portal ? 1 : 0
+  listener_arn = aws_lb_listener.http[0].arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.grafana[0].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/grafana", "/grafana/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "prometheus" {
+  count        = var.create_portal ? 1 : 0
+  listener_arn = aws_lb_listener.http[0].arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.prometheus[0].arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/prometheus", "/prometheus/*"]
+    }
+  }
+}
+
+# Prometheus does not natively serve under /prometheus. Optional path rewrite
+# via fixed-response is not ideal; instead expose Prometheus at /prometheus/*
+# only if --web.external-url is set. For simplicity we forward the path as-is
+# and document that UI links may need /prometheus prefix stripped, OR users
+# hit the private IP / SSM tunnel. Grafana is correctly configured for /grafana.
+
 output "alb_dns_name" {
   value = var.create_portal ? aws_lb.portal[0].dns_name : null
 }
 output "portal_url" {
   value = var.create_portal ? "http://${aws_lb.portal[0].dns_name}/" : null
+}
+output "grafana_alb_url" {
+  value = var.create_portal ? "http://${aws_lb.portal[0].dns_name}/grafana/" : null
+}
+output "prometheus_alb_url" {
+  value = var.create_portal ? "http://${aws_lb.portal[0].dns_name}/prometheus/" : null
+}
+output "alb_security_group_id" {
+  value = var.create_portal ? aws_security_group.alb[0].id : null
 }

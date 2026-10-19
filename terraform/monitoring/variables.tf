@@ -39,5 +39,25 @@ variable "controller_private_ip" {
   type    = string
   default = ""
 }
+variable "login_private_ip" {
+  type    = string
+  default = ""
+}
 variable "private_hosted_zone_id" { type = string }
 variable "private_hosted_zone_name" { type = string }
+
+# When true, Prometheus scrapes controller:slurm_exporter_port (only if an exporter is running)
+variable "slurm_exporter_enabled" {
+  type    = bool
+  default = false
+}
+variable "slurm_exporter_port" {
+  type    = number
+  default = 8080
+}
+
+# Portal ALB security group — opens Grafana/Prometheus to the ALB
+variable "alb_security_group_id" {
+  type    = string
+  default = ""
+}

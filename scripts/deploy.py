@@ -3,7 +3,10 @@
 Deployment lifecycle script for HPC Platform Operations Test Bed.
 
 Handles:
-- `up`: validates preflight, runs terraform apply, exports evidence, destroys tagged resources on failure
+- `up`: ordered deploy foundation → ami-build → instances
+- `foundation`: Phase 1 (VPC/network/storage/image_builder)
+- `instances`: Phase 3 (controller + login/debug)
+- `full`: Phase 4 remaining modules (monitoring, observability, portal, ...)
 - `down`: exports evidence, runs terraform destroy
 """
 
@@ -484,6 +487,34 @@ def cmd_instances(args):
     print(f"  Session: {session_id}")
 
 
+def cmd_full(args):
+    """
+    Apply remaining stack modules not covered by foundation/instances
+    (monitoring, observability, portal, patch, identity, fis, fsx, ...).
+
+    Expects foundation + instances already applied for the current session.
+    """
+    session_id = resolve_session_id(for_destroy=False)
+    print(f"Session ID: {session_id}")
+    print("Applying remaining modules (monitoring, observability, portal, ...)")
+
+    if not run_preflight():
+        print("Preflight checks failed. Aborting.")
+        sys.exit(1)
+
+    export_evidence("full_before")
+    # Untargeted apply fills in modules not yet in state (safe no-op for
+    # resources already created by foundation/instances).
+    if not terraform_apply(session_id, targets=None, label="full"):
+        print("\nFull remainder apply failed.")
+        sys.exit(1)
+
+    persist_session_id(session_id)
+    export_evidence("full_after")
+    print("\n✓ Remaining modules applied (monitoring, observability, portal, ...).")
+    print(f"  Session: {session_id}")
+
+
 def cmd_up(args):
     """
     Full ordered deploy:
@@ -598,6 +629,10 @@ def main():
         "instances",
         help="Phase 3: controller + login/debug (requires AMI in SSM)",
     )
+    subparsers.add_parser(
+        "full",
+        help="Apply remaining modules (monitoring, observability, portal, ...)",
+    )
     subparsers.add_parser("down", help="Destroy infrastructure")
 
     args = parser.parse_args()
@@ -608,6 +643,8 @@ def main():
         cmd_foundation(args)
     elif args.command == "instances":
         cmd_instances(args)
+    elif args.command == "full":
+        cmd_full(args)
     elif args.command == "down":
         cmd_down(args)
     else:
